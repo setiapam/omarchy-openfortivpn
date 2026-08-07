@@ -93,7 +93,7 @@ Item {
         let connectCmd = pluginDir + "/bin/omarchy-openfortivpn-up"
 
         // Use shell IPC or direct process execution
-        shell.call("omarchy.openfortivpn", "connect", "{}")
+        shell.call("murphi.openfortivpn", "connect", "{}")
 
         // Refresh after a delay to allow connection to establish
         Qt.callLater(function() {
@@ -105,7 +105,7 @@ Item {
         let pluginDir = root.manifest.directory || ""
         let disconnectCmd = pluginDir + "/bin/omarchy-openfortivpn-down"
 
-        shell.call("omarchy.openfortivpn", "disconnect", "{}")
+        shell.call("murphi.openfortivpn", "disconnect", "{}")
 
         root.vpnStatus = "disconnected"
         statusTimer.restart()

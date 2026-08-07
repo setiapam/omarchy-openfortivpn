@@ -14,8 +14,8 @@ sudo rm -f /etc/systemd/system/omarchy-openfortivpn@.service
 sudo rm -f /etc/sudoers.d/omarchy-openfortivpn
 sudo systemctl daemon-reload
 
-echo "==> Disabling omarchy.openfortivpn plugin..."
-omarchy-plugin-disable omarchy.openfortivpn
+echo "==> Disabling murphi.openfortivpn plugin..."
+omarchy-plugin-disable murphi.openfortivpn
 
 echo "==> Removing helper command links..."
 LINK_DIR="$HOME/.local/bin"
