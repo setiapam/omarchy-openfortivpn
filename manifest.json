@@ -6,7 +6,8 @@
   "description": "FortiVPN client integration with SAML/SSO support via openfortivpn and openfortivpn-webview",
   "kinds": ["bar-widget"],
   "entryPoints": {
-    "barWidget": "shell/plugins/panels/openfortivpn/Panel.qml"
+    "barWidget": "shell/plugins/panels/openfortivpn/Panel.qml",
+    "bar-widget": "shell/plugins/panels/openfortivpn/Panel.qml"
   },
   "barWidget": {
     "defaultSection": "right"
