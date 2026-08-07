@@ -61,32 +61,8 @@ Window {
     }
 
     function saveConfig() {
-        let proc = Qt.createQmlObject(`
-            import QtQuick
-            import Quickshell.Io
-            Process {
-                property string cmd: ""
-                property var argsList: []
-                command: [cmd].concat(argsList)
-                onExited: {
-                    let notifyCmd = ["notify-send", "-a", "OpenFortiVPN", "-i", "network-vpn", "Configuration Saved", "VPN configuration updated successfully."]
-                    Qt.createQmlObject(`
-                        import QtQuick
-                        import Quickshell.Io
-                        Process {
-                            command: ${JSON.stringify(notifyCmd)}
-                            running: true
-                        }
-                    `, configWindow, "notifyProc")
-                    configWindow.configSaved()
-                    configWindow.close()
-                    destroy()
-                }
-            }
-        `, configWindow, "writeConfigProc")
-        
-        proc.cmd = pluginDir + "/bin/omarchy-openfortivpn-config"
-        proc.argsList = [
+        let cmdArray = [
+            pluginDir + "/bin/omarchy-openfortivpn-config",
             "write-all",
             hostInput.text.trim(),
             portInput.text.trim(),
@@ -96,6 +72,29 @@ Window {
             samlSwitch.checked ? "true" : "false",
             certInput.text.trim()
         ]
+
+        let proc = Qt.createQmlObject(`
+            import QtQuick
+            import Quickshell.Io
+            Process {
+                command: ${JSON.stringify(cmdArray)}
+                onExited: {
+                    let notifyCmd = ["notify-send", "-a", "OpenFortiVPN", "-i", "network-vpn", "Configuration Saved", "VPN configuration updated successfully."]
+                    Qt.createQmlObject(\`
+                        import QtQuick
+                        import Quickshell.Io
+                        Process {
+                            command: \${JSON.stringify(notifyCmd)}
+                            running: true
+                        }
+                    \`, configWindow, "notifyProc")
+                    configWindow.configSaved()
+                    configWindow.close()
+                    destroy()
+                }
+            }
+        `, configWindow, "writeConfigProc")
+        
         proc.running = true
     }
 
@@ -105,13 +104,19 @@ Window {
             return
         }
 
+        let writeCmdArray = [
+            pluginDir + "/bin/omarchy-openfortivpn-config",
+            "write-all",
+            hostInput.text.trim(),
+            portInput.text.trim(),
+            "", "", "", "false", ""
+        ]
+
         let procWrite = Qt.createQmlObject(`
             import QtQuick
             import Quickshell.Io
             Process {
-                property string cmd: ""
-                property var argsList: []
-                command: [cmd].concat(argsList)
+                command: ${JSON.stringify(writeCmdArray)}
                 onExited: {
                     startCertFetch()
                     destroy()
@@ -119,13 +124,6 @@ Window {
             }
         `, configWindow, "tempWriteProc")
 
-        procWrite.cmd = pluginDir + "/bin/omarchy-openfortivpn-config"
-        procWrite.argsList = [
-            "write-all",
-            hostInput.text.trim(),
-            portInput.text.trim(),
-            "", "", "", "false", ""
-        ]
         procWrite.running = true
     }
 
@@ -133,12 +131,16 @@ Window {
         isFetchingCert = true
         certStatusMsg = "Probing gateway for certificate..."
 
+        let fetchCmdArray = [
+            pluginDir + "/bin/omarchy-openfortivpn-config",
+            "fetch-cert"
+        ]
+
         let proc = Qt.createQmlObject(`
             import QtQuick
             import Quickshell.Io
             Process {
-                property string cmd: ""
-                command: [cmd, "fetch-cert"]
+                command: ${JSON.stringify(fetchCmdArray)}
                 stdout: StdioCollector {
                     waitForEnd: true
                     onStreamFinished: {
@@ -160,7 +162,6 @@ Window {
             }
         `, configWindow, "fetchCertProc")
 
-        proc.cmd = pluginDir + "/bin/omarchy-openfortivpn-config"
         proc.running = true
     }
 
