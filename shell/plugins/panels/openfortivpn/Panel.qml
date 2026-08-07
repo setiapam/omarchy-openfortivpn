@@ -16,6 +16,11 @@ BarWidget {
     property bool samlMode: false
     property bool webviewAvailable: false
 
+    property var omarchyPath
+    property var shell
+    property var manifest
+    property var pluginRegistry
+
     // Colors
     readonly property color connectedColor: "#22c55e"
     readonly property color disconnectedColor: "#94a3b8"
