@@ -9,8 +9,6 @@ Window {
     height: 560
     minimumWidth: 440
     minimumHeight: 520
-    flags: Qt.Dialog | Qt.WindowStaysOnTopHint
-    modality: Qt.ApplicationModal
     color: "#1e1e2e"
 
     signal configSaved()

@@ -66,7 +66,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: vpn.uiActive ? "\uf023" : "\uf09c"
+    text: vpn.uiActive ? "🔒" : "🔓"
     foreground: root.barIconColor
     
     onPressed: function(buttonCode) {
@@ -141,7 +141,7 @@ Panel {
               
               iconComponent: Component {
                 OpticalGlyph {
-                  text: vpn.uiActive ? "\uf023" : "\uf09c"
+                  text: vpn.uiActive ? "🔒" : "🔓"
                   fontSize: Style.font.display
                   color: vpn.uiActive ? "#22c55e" : root.dim
                 }
