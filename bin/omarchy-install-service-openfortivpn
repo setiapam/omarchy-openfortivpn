@@ -1,0 +1,60 @@
+#!/bin/bash
+# omarchy:summary=Install OpenFortiVPN service and plugin
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+echo "==> Installing openfortivpn..."
+omarchy-pkg-add openfortivpn
+
+echo "==> Checking for openfortivpn-webview (SAML/SSO support)..."
+if ! omarchy-cmd-present openfortivpn-webview; then
+  echo "    openfortivpn-webview not found."
+  echo "    For SAML/SSO authentication, install it manually:"
+  echo "      AUR: yay -S openfortivpn-webview-qt"
+  echo "      Or build from: https://github.com/gm-vm/openfortivpn-webview"
+  echo ""
+  echo "    Continuing without SAML support..."
+fi
+
+echo "==> Setting up default configuration..."
+CONFIG_DIR="$HOME/.config/openfortivpn"
+mkdir -p "$CONFIG_DIR"
+
+if [[ ! -f "$CONFIG_DIR/config" ]]; then
+  PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+  cp "$PLUGIN_DIR/config/openfortivpn/config.example" "$CONFIG_DIR/config"
+  echo "    Created default config at $CONFIG_DIR/config"
+  echo "    Please edit it with your VPN gateway details."
+else
+  echo "    Config already exists at $CONFIG_DIR/config, skipping."
+fi
+
+echo "==> Configuring sudoers rule for passwordless VPN management..."
+SUDOERS_FILE="/etc/sudoers.d/omarchy-openfortivpn"
+echo "%wheel ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn" | sudo tee "$SUDOERS_FILE" >/dev/null
+echo "%sudo ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn" | sudo tee -a "$SUDOERS_FILE" >/dev/null
+sudo chmod 0440 "$SUDOERS_FILE"
+
+echo "==> Installing systemd service..."
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+sudo cp "$PLUGIN_DIR/systemd/omarchy-openfortivpn@.service" /etc/systemd/system/
+sudo systemctl daemon-reload
+
+echo "==> Enabling omarchy.openfortivpn plugin..."
+omarchy-plugin-enable omarchy.openfortivpn
+
+echo "==> Linking helper commands..."
+LINK_DIR="$HOME/.local/bin"
+mkdir -p "$LINK_DIR"
+for cmd in omarchy-openfortivpn-up omarchy-openfortivpn-down omarchy-openfortivpn-status; do
+  ln -sf "$PLUGIN_DIR/bin/$cmd" "$LINK_DIR/$cmd"
+done
+
+echo ""
+echo "✓ OpenFortiVPN plugin installed successfully!"
+echo ""
+echo "Next steps:"
+echo "  1. Edit ~/.config/openfortivpn/config with your VPN details"
+echo "  2. Use the panel widget to connect/disconnect"
+echo "  3. Or run: omarchy-openfortivpn-up"

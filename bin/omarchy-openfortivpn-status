@@ -1,0 +1,77 @@
+#!/bin/bash
+# omarchy:summary=Check OpenFortiVPN connection status
+# omarchy:args=[config_name]
+
+set -euo pipefail
+
+CONFIG_NAME="${1:-config}"
+PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
+CONFIG_FILE="$HOME/.config/openfortivpn/$CONFIG_NAME"
+
+# Output format: JSON for easy parsing by QML panel
+status="disconnected"
+pid=""
+host=""
+uptime_secs=""
+
+# Read host from config
+if [[ -f "$CONFIG_FILE" ]]; then
+  host=$(grep -i "^host[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | head -1 | sed 's/^host[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
+fi
+
+# Check if ppp interface exists (most reliable indicator)
+if ip link show ppp0 >/dev/null 2>&1; then
+  status="connected"
+fi
+
+# Check PID file
+if [[ -f "$PID_FILE" ]]; then
+  pid=$(cat "$PID_FILE")
+  if kill -0 "$pid" 2>/dev/null; then
+    status="connected"
+    # Calculate uptime from PID file modification time
+    if [[ -f "/proc/$pid" ]]; then
+      start_time=$(stat -c %Y "/proc/$pid" 2>/dev/null || echo "")
+      if [[ -n "$start_time" ]]; then
+        now=$(date +%s)
+        uptime_secs=$(( now - start_time ))
+      fi
+    fi
+  else
+    # PID file stale, clean up
+    rm -f "$PID_FILE"
+    pid=""
+  fi
+fi
+
+# Also check for any openfortivpn process as fallback
+if [[ "$status" == "disconnected" ]] && pgrep -x openfortivpn >/dev/null 2>&1; then
+  status="connected"
+  pid=$(pgrep -x openfortivpn | head -1)
+fi
+
+# Check if SAML mode
+saml="false"
+if [[ -f "$CONFIG_FILE" ]]; then
+  if grep -qi "^saml[[:space:]]*=[[:space:]]*true" "$CONFIG_FILE" 2>/dev/null; then
+    saml="true"
+  fi
+fi
+
+# Check if openfortivpn-webview is available
+webview_available="false"
+if command -v openfortivpn-webview >/dev/null 2>&1; then
+  webview_available="true"
+fi
+
+cat <<EOF
+{
+  "status": "$status",
+  "pid": "$pid",
+  "host": "$host",
+  "config": "$CONFIG_NAME",
+  "saml": $saml,
+  "webviewAvailable": $webview_available,
+  "uptimeSeconds": ${uptime_secs:-null}
+}
+EOF

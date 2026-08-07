@@ -1,0 +1,37 @@
+# OpenFortiVPN Configuration
+# See: https://github.com/adrienverge/openfortivpn
+#
+# Copy this file to ~/.config/openfortivpn/config
+# and edit with your VPN gateway details.
+
+# VPN Gateway
+host = vpn.example.com
+port = 443
+
+# Authentication (comment out for SAML)
+# username = your_username
+# password = your_password
+
+# Custom Realm (Optional)
+# If your VPN gateway uses a specific realm URL (e.g. /custom-realm or realm=custom-realm)
+# realm = custom-realm
+
+# SAML/SSO Authentication
+# Set to true if your gateway uses SAML (Azure AD, Okta, etc.)
+# Requires openfortivpn-webview to be installed.
+# saml = true
+
+# Gateway certificate fingerprint (SHA256)
+# Run: openfortivpn vpn.example.com:443 --username=test 2>&1 | grep "Gateway certificate"
+# to discover the cert hash on first connection.
+# trusted-cert = 0000000000000000000000000000000000000000000000000000000000000000
+
+# Optional: set custom PPP interface
+# pppd-ifname = ppp0
+
+# Optional: Disable default route (split tunneling)
+# set-routes = 0
+# set-dns = 0
+
+# Optional: Half-internet routes (only route specific subnets)
+# half-internet-routes = 0

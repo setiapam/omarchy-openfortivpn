@@ -1,0 +1,131 @@
+#!/bin/bash
+# omarchy:summary=Read/Write OpenFortiVPN config or fetch cert hash
+# omarchy:args=[action] [key] [value]
+
+set -euo pipefail
+
+ACTION="${1:-read}"
+KEY="${2:-}"
+VAL="${3:-}"
+
+CONFIG_DIR="$HOME/.config/openfortivpn"
+CONFIG_FILE="$CONFIG_DIR/config"
+mkdir -p "$CONFIG_DIR"
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  touch "$CONFIG_FILE"
+fi
+
+get_val() {
+  local k="$1"
+  local line
+  line=$(grep -i "^[[:space:]]*${k}[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | head -1 || true)
+  if [[ -n "$line" ]]; then
+    echo "$line" | sed 's/^[^=]*=[[:space:]]*//' | sed 's/[[:space:]]*$//'
+  else
+    echo ""
+  fi
+}
+
+set_val() {
+  local k="$1"
+  local v="$2"
+  if grep -qi "^[[:space:]]*#\?[[:space:]]*${k}[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null; then
+    if [[ -z "$v" ]]; then
+      # Comment out if empty
+      sed -i "s/^[[:space:]]*#\?[[:space:]]*${k}[[:space:]]*=.*/# ${k} = /" "$CONFIG_FILE"
+    else
+      sed -i "s/^[[:space:]]*#\?[[:space:]]*${k}[[:space:]]*=.*/${k} = ${v}/" "$CONFIG_FILE"
+    fi
+  else
+    if [[ -n "$v" ]]; then
+      echo "${k} = ${v}" >> "$CONFIG_FILE"
+    fi
+  fi
+}
+
+case "$ACTION" in
+  "read-all")
+    host=$(get_val "host")
+    port=$(get_val "port")
+    username=$(get_val "username")
+    password=$(get_val "password")
+    realm=$(get_val "realm")
+    saml=$(get_val "saml")
+    trusted_cert=$(get_val "trusted-cert")
+
+    cat <<EOF
+{
+  "host": "$host",
+  "port": "${port:-443}",
+  "username": "$username",
+  "password": "$password",
+  "realm": "$realm",
+  "saml": ${saml:-false},
+  "trustedCert": "$trusted_cert"
+}
+EOF
+    ;;
+
+  "write-all")
+    # Expects JSON payload or individual arguments via env/args
+    # Usage: omarchy-openfortivpn-config write-all host port username password realm saml trustedCert
+    HOST="${2:-}"
+    PORT="${3:-443}"
+    USER="${4:-}"
+    PASS="${5:-}"
+    REALM="${6:-}"
+    SAML="${7:-false}"
+    CERT="${8:-}"
+
+    set_val "host" "$HOST"
+    set_val "port" "$PORT"
+    set_val "username" "$USER"
+    set_val "password" "$PASS"
+    set_val "realm" "$REALM"
+    set_val "saml" "$SAML"
+    set_val "trusted-cert" "$CERT"
+
+    echo "✓ Configuration updated successfully"
+    ;;
+
+  "fetch-cert")
+    HOST=$(get_val "host")
+    PORT=$(get_val "port")
+    PORT="${PORT:-443}"
+
+    if [[ -z "$HOST" ]]; then
+      echo '{"error": "No host configured"}'
+      exit 1
+    fi
+
+    # Probe openfortivpn output to capture gateway certificate SHA256 digest
+    OUT=$(openfortivpn "${HOST}:${PORT}" --username=probe 2>&1 || true)
+    HASH=$(echo "$OUT" | grep -i "trusted-cert =" | head -1 | sed 's/.*trusted-cert = //' | tr -d '[:space:]' || true)
+
+    if [[ -z "$HASH" ]]; then
+      HASH=$(echo "$OUT" | grep -i "digest:" | head -1 | sed 's/.*digest:[[:space:]]*//' | tr -d '[:space:]' || true)
+    fi
+
+    if [[ -n "$HASH" ]]; then
+      cat <<EOF
+{
+  "status": "success",
+  "digest": "$HASH"
+}
+EOF
+    else
+      cat <<EOF
+{
+  "status": "error",
+  "message": "Could not automatically retrieve certificate hash."
+}
+EOF
+    fi
+    ;;
+
+  *)
+    echo "Usage: omarchy-openfortivpn-config [read-all|write-all|fetch-cert]"
+    exit 1
+    ;;
+esac

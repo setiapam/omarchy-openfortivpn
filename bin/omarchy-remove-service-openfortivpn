@@ -1,0 +1,33 @@
+#!/bin/bash
+# omarchy:summary=Remove OpenFortiVPN service and plugin
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+echo "==> Disconnecting VPN if active..."
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+"$PLUGIN_DIR/bin/omarchy-openfortivpn-down" 2>/dev/null || true
+
+echo "==> Removing systemd service and sudoers rules..."
+sudo systemctl stop 'omarchy-openfortivpn@*.service' 2>/dev/null || true
+sudo rm -f /etc/systemd/system/omarchy-openfortivpn@.service
+sudo rm -f /etc/sudoers.d/omarchy-openfortivpn
+sudo systemctl daemon-reload
+
+echo "==> Disabling omarchy.openfortivpn plugin..."
+omarchy-plugin-disable omarchy.openfortivpn
+
+echo "==> Removing helper command links..."
+LINK_DIR="$HOME/.local/bin"
+for cmd in omarchy-openfortivpn-up omarchy-openfortivpn-down omarchy-openfortivpn-status; do
+  rm -f "$LINK_DIR/$cmd"
+done
+
+echo "==> Removing openfortivpn package..."
+omarchy-pkg-drop openfortivpn
+
+echo ""
+echo "✓ OpenFortiVPN plugin removed successfully!"
+echo ""
+echo "Note: Your config at ~/.config/openfortivpn/ was preserved."
+echo "      Remove it manually if no longer needed."

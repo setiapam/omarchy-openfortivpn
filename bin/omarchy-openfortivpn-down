@@ -1,0 +1,60 @@
+#!/bin/bash
+# omarchy:summary=Disconnect from FortiVPN gateway
+# omarchy:args=[config_name]
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+CONFIG_NAME="${1:-config}"
+PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
+
+# Helper for elevated execution (supports non-interactive sudoers rule with pkexec fallback)
+exec_sudo() {
+  if sudo -n true 2>/dev/null; then
+    sudo "$@"
+  elif command -v pkexec >/dev/null 2>&1; then
+    pkexec "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+if [[ ! -f "$PID_FILE" ]]; then
+  # Try to find and kill any running openfortivpn process
+  if pgrep -x openfortivpn >/dev/null 2>&1; then
+    echo "==> No PID file found, but openfortivpn is running. Stopping..."
+    exec_sudo pkill -x openfortivpn 2>/dev/null || true
+    echo "✓ VPN disconnected"
+    omarchy-notification-send "OpenFortiVPN" "Disconnected" 2>/dev/null || true
+    exit 0
+  fi
+  echo "VPN is not connected."
+  exit 0
+fi
+
+VPN_PID=$(cat "$PID_FILE")
+
+if kill -0 "$VPN_PID" 2>/dev/null; then
+  echo "==> Disconnecting VPN (PID: $VPN_PID)..."
+  exec_sudo kill "$VPN_PID" 2>/dev/null || true
+
+  # Wait for graceful shutdown
+  for i in {1..10}; do
+    if ! kill -0 "$VPN_PID" 2>/dev/null; then
+      break
+    fi
+    sleep 0.5
+  done
+
+  # Force kill if still running
+  if kill -0 "$VPN_PID" 2>/dev/null; then
+    exec_sudo kill -9 "$VPN_PID" 2>/dev/null || true
+  fi
+
+  rm -f "$PID_FILE"
+  echo "✓ VPN disconnected"
+  omarchy-notification-send "OpenFortiVPN" "Disconnected" 2>/dev/null || true
+else
+  rm -f "$PID_FILE"
+  echo "VPN process already terminated."
+fi

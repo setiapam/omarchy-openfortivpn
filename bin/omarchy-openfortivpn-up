@@ -1,0 +1,114 @@
+#!/bin/bash
+# omarchy:summary=Connect to FortiVPN gateway
+# omarchy:args=[config_name]
+# omarchy:requires-sudo=true
+
+set -euo pipefail
+
+CONFIG_NAME="${1:-config}"
+CONFIG_DIR="$HOME/.config/openfortivpn"
+CONFIG_FILE="$CONFIG_DIR/$CONFIG_NAME"
+PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
+
+# Helper for elevated execution (supports non-interactive sudoers rule with pkexec fallback)
+exec_sudo() {
+  if sudo -n true 2>/dev/null; then
+    sudo "$@"
+  elif command -v pkexec >/dev/null 2>&1; then
+    pkexec "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  echo "VPN is already connected (PID: $(cat "$PID_FILE"))"
+  exit 0
+fi
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "Error: Config file not found: $CONFIG_FILE"
+  echo "Create one from the example or edit the default config."
+  exit 1
+fi
+
+# Read config to check if SAML is needed
+USE_SAML=false
+if grep -qi "^# saml[[:space:]]*=[[:space:]]*true" "$CONFIG_FILE" 2>/dev/null || \
+   grep -qi "^saml[[:space:]]*=[[:space:]]*true" "$CONFIG_FILE" 2>/dev/null; then
+  USE_SAML=true
+fi
+
+# Extract host, port, and realm from config
+VPN_HOST=$(grep -i "^host[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^host[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
+VPN_PORT=$(grep -i "^port[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^port[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
+VPN_PORT="${VPN_PORT:-443}"
+VPN_REALM=$(grep -i "^realm[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^realm[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
+
+connect_with_saml() {
+  if ! omarchy-cmd-present openfortivpn-webview; then
+    echo "Error: openfortivpn-webview is required for SAML authentication."
+    echo "Install it from: https://github.com/gm-vm/openfortivpn-webview"
+    exit 1
+  fi
+
+  WEBVIEW_TARGET="${VPN_HOST}:${VPN_PORT}"
+  if [[ -n "$VPN_REALM" ]]; then
+    # Format target URL with realm if defined (e.g. host:port/realm or host:port --realm realm)
+    if [[ "$VPN_REALM" == /* ]]; then
+      WEBVIEW_TARGET="${VPN_HOST}:${VPN_PORT}${VPN_REALM}"
+    else
+      WEBVIEW_TARGET="${VPN_HOST}:${VPN_PORT}/${VPN_REALM}"
+    fi
+  fi
+
+  echo "==> Launching SAML authentication for ${WEBVIEW_TARGET}..."
+  echo "    A browser window will open. Complete the login flow."
+
+  COOKIE=$(openfortivpn-webview "${WEBVIEW_TARGET}" 2>/dev/null)
+
+  if [[ -z "$COOKIE" ]]; then
+    echo "Error: Failed to obtain SAML cookie. Authentication may have been cancelled."
+    exit 1
+  fi
+
+  echo "==> SAML authentication successful. Connecting VPN tunnel..."
+  echo "$COOKIE" | exec_sudo openfortivpn -c "$CONFIG_FILE" --cookie-on-stdin &
+  VPN_PID=$!
+  echo "$VPN_PID" > "$PID_FILE"
+
+  # Wait briefly to check if connection succeeded
+  sleep 3
+  if kill -0 "$VPN_PID" 2>/dev/null; then
+    echo "✓ VPN connected successfully (PID: $VPN_PID)"
+    omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
+  else
+    rm -f "$PID_FILE"
+    echo "✗ VPN connection failed. Check the logs."
+    exit 1
+  fi
+}
+
+connect_with_password() {
+  echo "==> Connecting to ${VPN_HOST}:${VPN_PORT}..."
+  exec_sudo openfortivpn -c "$CONFIG_FILE" &
+  VPN_PID=$!
+  echo "$VPN_PID" > "$PID_FILE"
+
+  # Wait briefly to check if connection succeeded
+  sleep 3
+  if kill -0 "$VPN_PID" 2>/dev/null; then
+    echo "✓ VPN connected successfully (PID: $VPN_PID)"
+    omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
+  else
+    rm -f "$PID_FILE"
+    echo "✗ VPN connection failed. Check the logs."
+    exit 1
+  fi
+}
+
+if [[ "$USE_SAML" == "true" ]]; then
+  connect_with_saml
+else
+  connect_with_password
+fi
