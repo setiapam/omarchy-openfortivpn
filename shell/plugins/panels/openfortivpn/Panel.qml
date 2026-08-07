@@ -57,7 +57,7 @@ Panel {
     }
     var comp = Qt.createComponent("ConfigDialog.qml")
     if (comp.status === Component.Ready) {
-      configDialog = comp.createObject(root, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
+      configDialog = comp.createObject(null, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
       configDialog.show()
     }
   }
@@ -66,7 +66,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: vpn.uiActive ? "\uf3ed" : "\uf3c1"
+    text: vpn.uiActive ? "\uf023" : "\uf09c"
     foreground: root.barIconColor
     
     onPressed: function(buttonCode) {
@@ -141,7 +141,7 @@ Panel {
               
               iconComponent: Component {
                 OpticalGlyph {
-                  text: vpn.uiActive ? "\uf3ed" : "\uf3c1"
+                  text: vpn.uiActive ? "\uf023" : "\uf09c"
                   fontSize: Style.font.display
                   color: vpn.uiActive ? "#22c55e" : root.dim
                 }
