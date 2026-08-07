@@ -57,7 +57,9 @@ Panel {
     }
     var comp = Qt.createComponent("ConfigDialog.qml")
     if (comp.status === Component.Ready) {
-      configDialog = comp.createObject(null, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
+      // Use root.bar as parent so C++ takes ownership (prevents JS GC) 
+      // and it becomes a transient of the Bar (which never closes).
+      configDialog = comp.createObject(root.bar, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
       configDialog.show()
     }
   }
@@ -66,8 +68,16 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: vpn.uiActive ? "🔒" : "🔓"
     foreground: root.barIconColor
+    
+    iconComponent: Component {
+      Text {
+        text: vpn.uiActive ? "🔒" : "🔓"
+        color: root.barIconColor
+        font.pixelSize: Style.bar.iconFont
+        anchors.centerIn: parent
+      }
+    }
     
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) vpn.toggle()
@@ -140,10 +150,11 @@ Panel {
               iconOpacity: vpn.uiActive ? 1.0 : 0.5
               
               iconComponent: Component {
-                OpticalGlyph {
+                Text {
                   text: vpn.uiActive ? "🔒" : "🔓"
-                  fontSize: Style.font.display
+                  font.pixelSize: Style.font.display
                   color: vpn.uiActive ? "#22c55e" : root.dim
+                  anchors.centerIn: parent
                 }
               }
 
