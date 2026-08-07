@@ -46,11 +46,19 @@ Panel {
     function toggleVpn(): string { vpn.toggle(); return "ok" }
   }
 
+  property var configDialog: null
+
   function openConfig() {
+    if (configDialog) {
+      configDialog.show()
+      configDialog.raise()
+      configDialog.requestActivate()
+      return
+    }
     var comp = Qt.createComponent("ConfigDialog.qml")
     if (comp.status === Component.Ready) {
-      var dlg = comp.createObject(null, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
-      dlg.show()
+      configDialog = comp.createObject(root, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
+      configDialog.show()
     }
   }
 
@@ -58,16 +66,9 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    iconComponent: Component {
-      Item {
-        FortiIcon {
-          anchors.centerIn: parent
-          iconSize: Style.space(11)
-          color: root.barIconColor
-          active: vpn.uiActive
-        }
-      }
-    }
+    text: vpn.uiActive ? "\uf3ed" : "\uf3c1"
+    foreground: root.barIconColor
+    
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) vpn.toggle()
       else if (buttonCode === Qt.MiddleButton) vpn.refresh()
@@ -75,7 +76,7 @@ Panel {
     }
     
     SequentialAnimation on opacity {
-      running: vpn.status === "connecting"
+      running: vpn.status === "connecting" || vpn.status === "disconnecting"
       loops: Animation.Infinite
       NumberAnimation { to: 0.4; duration: 600; easing.type: Easing.InOutQuad }
       NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
@@ -139,10 +140,10 @@ Panel {
               iconOpacity: vpn.uiActive ? 1.0 : 0.5
               
               iconComponent: Component {
-                FortiIcon {
-                  iconSize: Style.font.display
+                OpticalGlyph {
+                  text: vpn.uiActive ? "\uf3ed" : "\uf3c1"
+                  fontSize: Style.font.display
                   color: vpn.uiActive ? "#22c55e" : root.dim
-                  active: vpn.uiActive
                 }
               }
 
