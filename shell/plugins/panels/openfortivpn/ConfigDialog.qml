@@ -69,6 +69,15 @@ Window {
                 property var argsList: []
                 command: [cmd].concat(argsList)
                 onExited: {
+                    let notifyCmd = ["notify-send", "-a", "OpenFortiVPN", "-i", "network-vpn", "Configuration Saved", "VPN configuration updated successfully."]
+                    Qt.createQmlObject(`
+                        import QtQuick
+                        import Quickshell.Io
+                        Process {
+                            command: ${JSON.stringify(notifyCmd)}
+                            running: true
+                        }
+                    `, configWindow, "notifyProc")
                     configWindow.configSaved()
                     configWindow.close()
                     destroy()

@@ -59,7 +59,7 @@ Panel {
     if (comp.status === Component.Ready) {
       // Use root.bar as parent so C++ takes ownership (prevents JS GC) 
       // and it becomes a transient of the Bar (which never closes).
-      configDialog = comp.createObject(root.bar, { pluginDir: "~/.config/omarchy/plugins/murphi.openfortivpn" })
+      configDialog = comp.createObject(root.bar, { pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/murphi.openfortivpn" })
       configDialog.show()
     }
   }
