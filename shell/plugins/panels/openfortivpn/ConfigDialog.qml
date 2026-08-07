@@ -33,6 +33,7 @@ Window {
 
     Process {
         id: readProc
+        command: ["bash", "-c", pluginDir + "/bin/omarchy-openfortivpn-config read-all"]
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
@@ -54,6 +55,17 @@ Window {
 
     Process {
         id: saveProc
+        command: [
+            pluginDir + "/bin/omarchy-openfortivpn-config",
+            "write-all",
+            hostInput.text.trim(),
+            portInput.text.trim(),
+            userInput.text.trim(),
+            passInput.text,
+            realmInput.text.trim(),
+            samlSwitch.checked ? "true" : "false",
+            certInput.text.trim()
+        ]
         onExited: {
             notifyProc.running = true
             configWindow.configSaved()
@@ -68,6 +80,13 @@ Window {
 
     Process {
         id: tempWriteProc
+        command: [
+            pluginDir + "/bin/omarchy-openfortivpn-config",
+            "write-all",
+            hostInput.text.trim(),
+            portInput.text.trim(),
+            "", "", "", "false", ""
+        ]
         onExited: {
             startCertFetch()
         }
@@ -75,6 +94,10 @@ Window {
 
     Process {
         id: fetchCertProc
+        command: [
+            pluginDir + "/bin/omarchy-openfortivpn-config",
+            "fetch-cert"
+        ]
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: {
@@ -95,22 +118,10 @@ Window {
     }
 
     function loadConfig() {
-        readProc.command = ["bash", "-c", pluginDir + "/bin/omarchy-openfortivpn-config read-all"]
         readProc.running = true
     }
 
     function saveConfig() {
-        saveProc.command = [
-            pluginDir + "/bin/omarchy-openfortivpn-config",
-            "write-all",
-            hostInput.text.trim(),
-            portInput.text.trim(),
-            userInput.text.trim(),
-            passInput.text,
-            realmInput.text.trim(),
-            samlSwitch.checked ? "true" : "false",
-            certInput.text.trim()
-        ]
         saveProc.running = true
     }
 
@@ -119,25 +130,12 @@ Window {
             certStatusMsg = "Please enter Gateway Host first!"
             return
         }
-
-        tempWriteProc.command = [
-            pluginDir + "/bin/omarchy-openfortivpn-config",
-            "write-all",
-            hostInput.text.trim(),
-            portInput.text.trim(),
-            "", "", "", "false", ""
-        ]
         tempWriteProc.running = true
     }
 
     function startCertFetch() {
         isFetchingCert = true
         certStatusMsg = "Probing gateway for certificate..."
-
-        fetchCertProc.command = [
-            pluginDir + "/bin/omarchy-openfortivpn-config",
-            "fetch-cert"
-        ]
         fetchCertProc.running = true
     }
 
