@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import Quickshell.Io
 
 Window {
     id: configWindow
@@ -30,38 +31,76 @@ Window {
         loadConfig()
     }
 
-    function loadConfig() {
-        let readCmd = pluginDir + "/bin/omarchy-openfortivpn-config read-all"
-        let proc = Qt.createQmlObject(`
-            import QtQuick
-            import Quickshell.Io
-            Process {
-                command: ["bash", "-c", "${readCmd}"]
-                stdout: StdioCollector {
-                    waitForEnd: true
-                    onStreamFinished: {
-                        try {
-                            let data = JSON.parse(text)
-                            configWindow.host = data.host || ""
-                            configWindow.port = data.port || "443"
-                            configWindow.isSaml = data.saml || false
-                            configWindow.username = data.username || ""
-                            configWindow.password = data.password || ""
-                            configWindow.realm = data.realm || ""
-                            configWindow.trustedCert = data.trustedCert || ""
-                        } catch (e) {
-                            console.warn("OpenFortiVPN: Failed to parse config JSON:", e)
-                        }
-                    }
+    Process {
+        id: readProc
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                try {
+                    let data = JSON.parse(text)
+                    configWindow.host = data.host || ""
+                    configWindow.port = data.port || "443"
+                    configWindow.isSaml = data.saml || false
+                    configWindow.username = data.username || ""
+                    configWindow.password = data.password || ""
+                    configWindow.realm = data.realm || ""
+                    configWindow.trustedCert = data.trustedCert || ""
+                } catch (e) {
+                    console.warn("OpenFortiVPN: Failed to parse config JSON:", e)
                 }
-                onExited: destroy()
             }
-        `, configWindow, "readConfigProc")
-        proc.running = true
+        }
+    }
+
+    Process {
+        id: saveProc
+        onExited: {
+            notifyProc.running = true
+            configWindow.configSaved()
+            configWindow.close()
+        }
+    }
+
+    Process {
+        id: notifyProc
+        command: ["notify-send", "-a", "OpenFortiVPN", "-i", "network-vpn", "Configuration Saved", "VPN configuration updated successfully."]
+    }
+
+    Process {
+        id: tempWriteProc
+        onExited: {
+            startCertFetch()
+        }
+    }
+
+    Process {
+        id: fetchCertProc
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: {
+                configWindow.isFetchingCert = false
+                try {
+                    let res = JSON.parse(text)
+                    if (res.status === "success" && res.digest) {
+                        configWindow.trustedCert = res.digest
+                        configWindow.certStatusMsg = "✓ Certificate digest retrieved!"
+                    } else {
+                        configWindow.certStatusMsg = res.message || "Failed to fetch certificate."
+                    }
+                } catch (e) {
+                    configWindow.certStatusMsg = "Failed to parse certificate hash output."
+                }
+            }
+        }
+    }
+
+    function loadConfig() {
+        readProc.command = ["bash", "-c", pluginDir + "/bin/omarchy-openfortivpn-config read-all"]
+        readProc.running = true
     }
 
     function saveConfig() {
-        let cmdArray = [
+        saveProc.command = [
             pluginDir + "/bin/omarchy-openfortivpn-config",
             "write-all",
             hostInput.text.trim(),
@@ -72,30 +111,7 @@ Window {
             samlSwitch.checked ? "true" : "false",
             certInput.text.trim()
         ]
-
-        let proc = Qt.createQmlObject(`
-            import QtQuick
-            import Quickshell.Io
-            Process {
-                command: ${JSON.stringify(cmdArray)}
-                onExited: {
-                    let notifyCmd = ["notify-send", "-a", "OpenFortiVPN", "-i", "network-vpn", "Configuration Saved", "VPN configuration updated successfully."]
-                    Qt.createQmlObject(\`
-                        import QtQuick
-                        import Quickshell.Io
-                        Process {
-                            command: \${JSON.stringify(notifyCmd)}
-                            running: true
-                        }
-                    \`, configWindow, "notifyProc")
-                    configWindow.configSaved()
-                    configWindow.close()
-                    destroy()
-                }
-            }
-        `, configWindow, "writeConfigProc")
-        
-        proc.running = true
+        saveProc.running = true
     }
 
     function fetchCertHash() {
@@ -104,65 +120,25 @@ Window {
             return
         }
 
-        let writeCmdArray = [
+        tempWriteProc.command = [
             pluginDir + "/bin/omarchy-openfortivpn-config",
             "write-all",
             hostInput.text.trim(),
             portInput.text.trim(),
             "", "", "", "false", ""
         ]
-
-        let procWrite = Qt.createQmlObject(`
-            import QtQuick
-            import Quickshell.Io
-            Process {
-                command: ${JSON.stringify(writeCmdArray)}
-                onExited: {
-                    startCertFetch()
-                    destroy()
-                }
-            }
-        `, configWindow, "tempWriteProc")
-
-        procWrite.running = true
+        tempWriteProc.running = true
     }
 
     function startCertFetch() {
         isFetchingCert = true
         certStatusMsg = "Probing gateway for certificate..."
 
-        let fetchCmdArray = [
+        fetchCertProc.command = [
             pluginDir + "/bin/omarchy-openfortivpn-config",
             "fetch-cert"
         ]
-
-        let proc = Qt.createQmlObject(`
-            import QtQuick
-            import Quickshell.Io
-            Process {
-                command: ${JSON.stringify(fetchCmdArray)}
-                stdout: StdioCollector {
-                    waitForEnd: true
-                    onStreamFinished: {
-                        configWindow.isFetchingCert = false
-                        try {
-                            let res = JSON.parse(text)
-                            if (res.status === "success" && res.digest) {
-                                configWindow.trustedCert = res.digest
-                                configWindow.certStatusMsg = "✓ Certificate digest retrieved!"
-                            } else {
-                                configWindow.certStatusMsg = res.message || "Failed to fetch certificate."
-                            }
-                        } catch (e) {
-                            configWindow.certStatusMsg = "Failed to parse certificate hash output."
-                        }
-                    }
-                }
-                onExited: destroy()
-            }
-        `, configWindow, "fetchCertProc")
-
-        proc.running = true
+        fetchCertProc.running = true
     }
 
     ColumnLayout {
