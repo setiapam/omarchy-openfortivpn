@@ -32,54 +32,62 @@ Window {
 
     function loadConfig() {
         let readCmd = pluginDir + "/bin/omarchy-openfortivpn-config read-all"
-        let proc = Qt.createQmlObject(
-            'import QtQuick; import io.github.parzival1918.qprocess 1.0; QProcess {}',
-            configWindow, "readConfigProc"
-        )
-        if (!proc) return
-
-        proc.command = readCmd
-        proc.onFinished.connect(function() {
-            try {
-                let data = JSON.parse(proc.readAllStandardOutput())
-                configWindow.host = data.host || ""
-                configWindow.port = data.port || "443"
-                configWindow.isSaml = data.saml || false
-                configWindow.username = data.username || ""
-                configWindow.password = data.password || ""
-                configWindow.realm = data.realm || ""
-                configWindow.trustedCert = data.trustedCert || ""
-            } catch (e) {
-                console.warn("OpenFortiVPN: Failed to parse config JSON:", e)
+        let proc = Qt.createQmlObject(`
+            import QtQuick
+            import Quickshell.Io
+            Process {
+                command: ["bash", "-c", "${readCmd}"]
+                stdout: StdioCollector {
+                    waitForEnd: true
+                    onStreamFinished: {
+                        try {
+                            let data = JSON.parse(text)
+                            configWindow.host = data.host || ""
+                            configWindow.port = data.port || "443"
+                            configWindow.isSaml = data.saml || false
+                            configWindow.username = data.username || ""
+                            configWindow.password = data.password || ""
+                            configWindow.realm = data.realm || ""
+                            configWindow.trustedCert = data.trustedCert || ""
+                        } catch (e) {
+                            console.warn("OpenFortiVPN: Failed to parse config JSON:", e)
+                        }
+                    }
+                }
+                onExited: destroy()
             }
-            proc.destroy()
-        })
-        proc.start()
+        `, configWindow, "readConfigProc")
+        proc.running = true
     }
 
     function saveConfig() {
-        let writeCmd = pluginDir + "/bin/omarchy-openfortivpn-config write-all " +
-            "'" + hostInput.text.trim() + "' " +
-            "'" + portInput.text.trim() + "' " +
-            "'" + userInput.text.trim() + "' " +
-            "'" + passInput.text + "' " +
-            "'" + realmInput.text.trim() + "' " +
-            "'" + (samlSwitch.checked ? "true" : "false") + "' " +
-            "'" + certInput.text.trim() + "'"
-
-        let proc = Qt.createQmlObject(
-            'import QtQuick; import io.github.parzival1918.qprocess 1.0; QProcess {}',
-            configWindow, "writeConfigProc"
-        )
-        if (!proc) return
-
-        proc.command = writeCmd
-        proc.onFinished.connect(function() {
-            proc.destroy()
-            configWindow.configSaved()
-            configWindow.close()
-        })
-        proc.start()
+        let proc = Qt.createQmlObject(`
+            import QtQuick
+            import Quickshell.Io
+            Process {
+                property string cmd: ""
+                property var argsList: []
+                command: [cmd].concat(argsList)
+                onExited: {
+                    configWindow.configSaved()
+                    configWindow.close()
+                    destroy()
+                }
+            }
+        `, configWindow, "writeConfigProc")
+        
+        proc.cmd = pluginDir + "/bin/omarchy-openfortivpn-config"
+        proc.argsList = [
+            "write-all",
+            hostInput.text.trim(),
+            portInput.text.trim(),
+            userInput.text.trim(),
+            passInput.text,
+            realmInput.text.trim(),
+            samlSwitch.checked ? "true" : "false",
+            certInput.text.trim()
+        ]
+        proc.running = true
     }
 
     function fetchCertHash() {
@@ -88,58 +96,63 @@ Window {
             return
         }
 
-        // Save current host/port first so config tool reads updated value
-        let writeCmd = pluginDir + "/bin/omarchy-openfortivpn-config write-all '" + hostInput.text.trim() + "' '" + portInput.text.trim() + "' '' '' '' 'false' ''"
-        let procWrite = Qt.createQmlObject(
-            'import QtQuick; import io.github.parzival1918.qprocess 1.0; QProcess {}',
-            configWindow, "tempWriteProc"
-        )
+        let procWrite = Qt.createQmlObject(`
+            import QtQuick
+            import Quickshell.Io
+            Process {
+                property string cmd: ""
+                property var argsList: []
+                command: [cmd].concat(argsList)
+                onExited: {
+                    startCertFetch()
+                    destroy()
+                }
+            }
+        `, configWindow, "tempWriteProc")
 
-        if (procWrite) {
-            procWrite.command = writeCmd
-            procWrite.onFinished.connect(function() {
-                procWrite.destroy()
-                startCertFetch()
-            })
-            procWrite.start()
-        } else {
-            startCertFetch()
-        }
+        procWrite.cmd = pluginDir + "/bin/omarchy-openfortivpn-config"
+        procWrite.argsList = [
+            "write-all",
+            hostInput.text.trim(),
+            portInput.text.trim(),
+            "", "", "", "false", ""
+        ]
+        procWrite.running = true
     }
 
     function startCertFetch() {
         isFetchingCert = true
         certStatusMsg = "Probing gateway for certificate..."
 
-        let fetchCmd = pluginDir + "/bin/omarchy-openfortivpn-config fetch-cert"
-        let proc = Qt.createQmlObject(
-            'import QtQuick; import io.github.parzival1918.qprocess 1.0; QProcess {}',
-            configWindow, "fetchCertProc"
-        )
-
-        if (!proc) {
-            isFetchingCert = false
-            certStatusMsg = "Process engine unavailable."
-            return
-        }
-
-        proc.command = fetchCmd
-        proc.onFinished.connect(function() {
-            isFetchingCert = false
-            try {
-                let res = JSON.parse(proc.readAllStandardOutput())
-                if (res.status === "success" && res.digest) {
-                    certInput.text = res.digest
-                    certStatusMsg = "✓ Certificate digest retrieved!"
-                } else {
-                    certStatusMsg = res.message || "Failed to fetch certificate."
+        let proc = Qt.createQmlObject(`
+            import QtQuick
+            import Quickshell.Io
+            Process {
+                property string cmd: ""
+                command: [cmd, "fetch-cert"]
+                stdout: StdioCollector {
+                    waitForEnd: true
+                    onStreamFinished: {
+                        configWindow.isFetchingCert = false
+                        try {
+                            let res = JSON.parse(text)
+                            if (res.status === "success" && res.digest) {
+                                configWindow.trustedCert = res.digest
+                                configWindow.certStatusMsg = "✓ Certificate digest retrieved!"
+                            } else {
+                                configWindow.certStatusMsg = res.message || "Failed to fetch certificate."
+                            }
+                        } catch (e) {
+                            configWindow.certStatusMsg = "Failed to parse certificate hash output."
+                        }
+                    }
                 }
-            } catch (e) {
-                certStatusMsg = "Failed to parse certificate hash output."
+                onExited: destroy()
             }
-            proc.destroy()
-        })
-        proc.start()
+        `, configWindow, "fetchCertProc")
+
+        proc.cmd = pluginDir + "/bin/omarchy-openfortivpn-config"
+        proc.running = true
     }
 
     ColumnLayout {
