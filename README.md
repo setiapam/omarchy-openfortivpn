@@ -1,144 +1,58 @@
-# omarchy-openfortivpn
+# OpenFortiVPN
 
-An [Omarchy](https://github.com/basecamp/omarchy) plugin for [OpenFortiVPN](https://github.com/adrienverge/openfortivpn) — connect to Fortinet VPN gateways directly from your desktop panel, with full SAML/SSO support via [openfortivpn-webview](https://github.com/gm-vm/openfortivpn-webview).
+An [Omarchy](https://omarchy.org/) shell bar widget: a VPN icon that shows the current connection status and uptime, with a click-to-open popup for configuring connection details, toggling SAML login, and saving credentials. (Only works for Omarchy Quattro).
 
-## Features
+Matches the look of the built-in wifi/sound icons only in the bar, no inline text.
 
-- 🛡️ **Bar widget** — shows VPN status (connected/disconnected), gateway hostname, and uptime in the Omarchy panel
-- 🔐 **SAML/SSO support** — seamless authentication with Azure AD, Okta, and other identity providers via openfortivpn-webview
-- 🔑 **Password auth** — standard username/password authentication supported out of the box
-- 🔄 **One-click toggle** — left-click the panel widget to connect/disconnect
-- 📋 **Context menu** — right-click for config editing, status refresh, and mode info
-- 📦 **Clean install/uninstall** — follows Omarchy plugin conventions with `omarchy-install-service` / `omarchy-remove-service`
+![Popup opened after left-clicking the bar icon](preview.png)
+
+## How it works
+
+- `omarchy-openfortivpn-config` reads and writes connection settings to `~/.config/openfortivpn/config`. It supports standard username/password and SAML authentication (via `openfortivpn-webview`). Changing configuration automatically disconnects an active VPN session.
+- `omarchy-openfortivpn-up` handles the connection logic. For SAML, it pops up a browser window, retrieves the `SVPNCOOKIE`, and feeds it into the VPN client. For password login, it utilizes `systemctl --user` to ensure background auto-connection across reboots. Multi-monitor double-launches are prevented using `flock`.
+- `omarchy-openfortivpn-down` safely disables the active connection, systemd services, and SAML autostart mechanisms.
+- `omarchy-openfortivpn-status` monitors the VPN state and uptime to reflect accurately on the widget.
+- `Panel.qml` renders the bar icon, `ConfigPanel.qml` manages the settings popup UI, and `Service.qml` handles state management and SAML autostart hooks for Wayland/Hyprland.
 
 ## Installation
 
-### Prerequisites
-
-- [Omarchy](https://github.com/basecamp/omarchy) installed and running
-- `openfortivpn` (installed automatically by the plugin)
-- `openfortivpn-webview` (optional, for SAML/SSO — install separately)
-
-### Install the plugin
+Dependencies (like `fuse2` and `openfortivpn-webview` AppImage) are automatically handled and provisioned during the standard Omarchy plugin installation process.
 
 ```bash
-# Clone into the Omarchy plugins directory
-git clone https://github.com/YOUR_USERNAME/omarchy-openfortivpn \
-  ~/.config/omarchy/plugins/omarchy.openfortivpn
+omarchy plugin add https://github.com/setiapam/omarchy-openfortivpn.git --enable
 
-# Run the installer
-~/.config/omarchy/plugins/omarchy.openfortivpn/bin/omarchy-install-service-openfortivpn
-```
-
-### Install SAML/SSO support (optional)
-
-If your VPN gateway uses SAML authentication (Azure AD, Okta, etc.):
-
-```bash
-# Arch Linux (AUR)
-yay -S openfortivpn-webview-qt
-
-# Or build from source
-git clone https://github.com/gm-vm/openfortivpn-webview
-cd openfortivpn-webview
-# Follow build instructions for your platform
+# Run the installer to provision dependencies (fuse2, webview) and sudoers rules
+~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-install-service-openfortivpn
 ```
 
 ## Configuration
 
-Edit `~/.config/openfortivpn/config`:
+Settings are managed via the UI popup, but you can manually edit `~/.config/openfortivpn/config`:
 
 ```ini
 # VPN Gateway
 host = vpn.example.com
 port = 443
+realm = developer
 
 # For password auth:
 username = your_username
 password = your_password
 
-# For SAML/SSO auth (comment out username/password):
-# saml = true
-
-# Gateway certificate (get on first connection attempt)
-# trusted-cert = <sha256-hash>
+# For SAML/SSO auth:
+saml = true
 ```
-
-### Finding your gateway certificate
-
-On first connection, openfortivpn will show the certificate hash:
-
-```bash
-sudo openfortivpn vpn.example.com:443 --username=test 2>&1 | grep "Gateway certificate"
-```
-
-Copy the hash and add it to your config as `trusted-cert`.
 
 ## Usage
 
-### Panel Widget
+- **Left-click** — Toggle VPN connection (Connect/Disconnect)
+- **Right-click** — Open settings popup to edit config or view details
 
-- **Left-click** — Toggle VPN connection
-- **Right-click** — Open context menu (disconnect, edit config, refresh)
-
-### Command Line
-
-```bash
-# Connect
-omarchy-openfortivpn-up
-
-# Connect with a named config
-omarchy-openfortivpn-up mywork
-
-# Disconnect
-omarchy-openfortivpn-down
-
-# Check status (JSON output)
-omarchy-openfortivpn-status
-```
-
-### SAML Workflow
-
-When `saml = true` is set in your config:
-
-1. Click the panel widget (or run `omarchy-openfortivpn-up`)
-2. A browser window opens with your identity provider login
-3. Complete the MFA/SSO flow
-4. The VPN connects automatically after authentication
-
-## Project Structure
-
-```
-omarchy-openfortivpn/
-├── manifest.json                                    # Omarchy plugin manifest
-├── README.md
-├── bin/
-│   ├── omarchy-install-service-openfortivpn         # Plugin installer
-│   ├── omarchy-remove-service-openfortivpn          # Plugin uninstaller
-│   ├── omarchy-openfortivpn-up                      # Connect to VPN
-│   ├── omarchy-openfortivpn-down                    # Disconnect VPN
-│   └── omarchy-openfortivpn-status                  # Check status (JSON)
-├── config/
-│   └── openfortivpn/
-│       └── config.example                           # Example configuration
-├── shell/
-│   └── plugins/
-│       └── panels/
-│           └── openfortivpn/
-│               └── Panel.qml                        # Bar widget UI
-└── systemd/
-    └── omarchy-openfortivpn@.service                # Systemd service template
-```
+*Note: When using Password auth, the VPN will automatically run as a user-level systemd service and persist across reboots. When using SAML, it will automatically popup the login browser upon your next GUI login.*
 
 ## Uninstall
 
 ```bash
-~/.config/omarchy/plugins/omarchy.openfortivpn/bin/omarchy-remove-service-openfortivpn
-rm -rf ~/.config/omarchy/plugins/omarchy.openfortivpn
+omarchy plugin remove setiapam.omarchy-openfortivpn
 ```
-
 Your VPN config at `~/.config/openfortivpn/` is preserved during uninstall.
-
-## License
-
-MIT
