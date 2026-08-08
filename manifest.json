@@ -5,12 +5,15 @@
   "version": "1.0.0",
   "description": "FortiVPN client integration with SAML/SSO support via openfortivpn and openfortivpn-webview",
   "kinds": ["bar-widget"],
+  "author": "setiapam",
   "entryPoints": {
-    "barWidget": "shell/plugins/panels/openfortivpn/Panel.qml",
-    "bar-widget": "shell/plugins/panels/openfortivpn/Panel.qml"
+    "barWidget": "shell/plugins/panels/openfortivpn/Panel.qml"
   },
   "barWidget": {
-    "defaultSection": "right"
+    "displayName": "OpenFortiVPN",
+    "description": "FortiVPN client with SAML/SSO support",
+    "category": "System",
+    "allowMultiple": false
   },
   "license": "MIT"
 }
