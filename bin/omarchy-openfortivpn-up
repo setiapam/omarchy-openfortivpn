@@ -10,9 +10,16 @@ CONFIG_DIR="$HOME/.config/openfortivpn"
 CONFIG_FILE="$CONFIG_DIR/$CONFIG_NAME"
 PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
 
+# Ensure only one instance of the script runs at a time (prevents multi-monitor double-launch)
+exec 9>"/tmp/omarchy-openfortivpn-${CONFIG_NAME}.lock"
+if ! flock -n 9; then
+  echo "Another instance of openfortivpn-up is already running."
+  exit 0
+fi
+
 # Helper for elevated execution (supports non-interactive sudoers rule with pkexec fallback)
 exec_sudo() {
-  if sudo -n true 2>/dev/null; then
+  if sudo -n -l "$1" >/dev/null 2>&1; then
     sudo "$@"
   elif command -v pkexec >/dev/null 2>&1; then
     pkexec "$@"
@@ -40,15 +47,16 @@ if grep -qi "^# saml[[:space:]]*=[[:space:]]*true" "$CONFIG_FILE" 2>/dev/null ||
 fi
 
 # Extract host, port, and realm from config
-VPN_HOST=$(grep -i "^host[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^host[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
-VPN_PORT=$(grep -i "^port[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^port[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
+VPN_HOST=$(grep -i "^host[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^host[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]' || true)
+VPN_PORT=$(grep -i "^port[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^port[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]' || true)
 VPN_PORT="${VPN_PORT:-443}"
-VPN_REALM=$(grep -i "^realm[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^realm[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]')
+VPN_REALM=$(grep -i "^realm[[:space:]]*=" "$CONFIG_FILE" | head -1 | sed 's/^realm[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]' || true)
 
 connect_with_saml() {
   if ! omarchy-cmd-present openfortivpn-webview; then
     echo "Error: openfortivpn-webview is required for SAML authentication."
     echo "Install it from: https://github.com/gm-vm/openfortivpn-webview"
+    omarchy-notification-send "OpenFortiVPN" "SAML Error: openfortivpn-webview is required but not installed." 2>/dev/null || true
     exit 1
   fi
 
@@ -82,6 +90,9 @@ connect_with_saml() {
   if kill -0 "$VPN_PID" 2>/dev/null; then
     echo "✓ VPN connected successfully (PID: $VPN_PID)"
     omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
+
+    # Enable autostart for SAML on next GUI login
+    touch "$HOME/.config/openfortivpn/.saml_autostart"
   else
     rm -f "$PID_FILE"
     echo "✗ VPN connection failed. Check the logs."
@@ -90,19 +101,39 @@ connect_with_saml() {
 }
 
 connect_with_password() {
-  echo "==> Connecting to ${VPN_HOST}:${VPN_PORT}..."
-  exec_sudo openfortivpn -c "$CONFIG_FILE" &
-  VPN_PID=$!
-  echo "$VPN_PID" > "$PID_FILE"
+  echo "==> Connecting to ${VPN_HOST}:${VPN_PORT} via systemd..."
+  
+  # Ensure the user service file exists
+  if [[ ! -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service" ]]; then
+    mkdir -p "$HOME/.config/systemd/user"
+    cat << 'EOF' > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
+[Unit]
+Description=OpenFortiVPN Auto-Connect
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sudo -n /usr/bin/openfortivpn -c %h/.config/openfortivpn/config
+ExecStop=/usr/bin/sudo -n /usr/bin/pkill -x openfortivpn
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+EOF
+    systemctl --user daemon-reload
+  fi
+
+  # Enable and start the service so it persists across reboots
+  systemctl --user enable --now omarchy-openfortivpn.service
 
   # Wait briefly to check if connection succeeded
   sleep 3
-  if kill -0 "$VPN_PID" 2>/dev/null; then
-    echo "✓ VPN connected successfully (PID: $VPN_PID)"
+  if systemctl --user is-active --quiet omarchy-openfortivpn.service; then
+    echo "✓ VPN connected successfully via systemd"
     omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
   else
-    rm -f "$PID_FILE"
-    echo "✗ VPN connection failed. Check the logs."
+    echo "✗ VPN connection failed. Check 'journalctl --user -xeu omarchy-openfortivpn' for logs."
     exit 1
   fi
 }

@@ -85,4 +85,20 @@ Item {
     triggeredOnStart: true
     onTriggered: root.refresh()
   }
+
+  Process {
+    id: autostartProc
+    command: ["bash", "-c", "if [[ -f ~/.config/openfortivpn/.saml_autostart ]]; then echo 'autostart'; fi"]
+    stdout: SplitParser {
+      onRead: function(data) {
+        if (data.trim() === 'autostart') {
+          root.up()
+        }
+      }
+    }
+  }
+
+  Component.onCompleted: {
+    autostartProc.running = true
+  }
 }

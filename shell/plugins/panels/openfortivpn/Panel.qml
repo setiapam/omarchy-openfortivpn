@@ -20,7 +20,7 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   
-  readonly property color barIconColor: vpn.uiActive ? (bar ? "#22c55e" : "#22c55e") : Qt.darker(foreground, 1.55)
+  readonly property color barIconColor: vpn.uiActive ? foreground : Qt.darker(foreground, 1.55)
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -46,23 +46,7 @@ Panel {
     function toggleVpn(): string { vpn.toggle(); return "ok" }
   }
 
-  property var configDialog: null
-
-  function openConfig() {
-    if (configDialog) {
-      configDialog.show()
-      configDialog.raise()
-      configDialog.requestActivate()
-      return
-    }
-    var comp = Qt.createComponent("ConfigDialog.qml")
-    if (comp.status === Component.Ready) {
-      // Use root.bar as parent so C++ takes ownership (prevents JS GC) 
-      // and it becomes a transient of the Bar (which never closes).
-      configDialog = comp.createObject(root.bar, { pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/murphi.openfortivpn" })
-      configDialog.show()
-    }
-  }
+  property bool isConfigOpen: false
 
   BarIconButton {
     id: button
@@ -71,11 +55,27 @@ Panel {
     foreground: root.barIconColor
     
     iconComponent: Component {
-      Text {
-        text: vpn.uiActive ? "🔒" : "🔓"
-        color: root.barIconColor
-        font.pixelSize: Style.bar.iconFont
-        anchors.centerIn: parent
+      Item {
+        implicitWidth: Style.space(11)
+        implicitHeight: Style.space(11)
+        
+        Text {
+          text: "\uf023"
+          color: root.barIconColor
+          font.family: root.fontFamily
+          font.pixelSize: Style.space(11)
+          anchors.centerIn: parent
+        }
+        
+        Rectangle {
+          visible: !vpn.uiActive
+          anchors.centerIn: parent
+          width: parent.width * 1.22
+          height: Math.max(2, parent.height * 0.14)
+          radius: height / 2
+          color: root.barIconColor
+          rotation: -45
+        }
       }
     }
     
@@ -114,7 +114,7 @@ Panel {
       onActivateRequested: {
         if (root.cursorActive) {
           if (root.focusSection === "header") vpn.toggle()
-          else if (root.focusSection === "config") { root.openConfig(); root.close() }
+          else if (root.focusSection === "config") root.isConfigOpen = !root.isConfigOpen
         }
       }
       onCloseRequested: root.close()
@@ -150,11 +150,27 @@ Panel {
               iconOpacity: vpn.uiActive ? 1.0 : 0.5
               
               iconComponent: Component {
-                Text {
-                  text: vpn.uiActive ? "🔒" : "🔓"
-                  font.pixelSize: Style.font.display
-                  color: vpn.uiActive ? "#22c55e" : root.dim
-                  anchors.centerIn: parent
+                Item {
+                  implicitWidth: Style.font.display
+                  implicitHeight: Style.font.display
+                  
+                  Text {
+                    text: "\uf023"
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.display
+                    color: vpn.uiActive ? root.foreground : root.dim
+                    anchors.centerIn: parent
+                  }
+                  
+                  Rectangle {
+                    visible: !vpn.uiActive
+                    anchors.centerIn: parent
+                    width: parent.width * 1.22
+                    height: Math.max(2, parent.height * 0.14)
+                    radius: height / 2
+                    color: root.dim
+                    rotation: -45
+                  }
                 }
               }
 
@@ -189,7 +205,7 @@ Panel {
                 anchors.fill: parent
                 hoverEnabled: true
                 onEntered: { root.cursorActive = true; root.focusSection = "config" }
-                onClicked: { root.openConfig(); root.close() }
+                onClicked: { root.isConfigOpen = !root.isConfigOpen }
               }
               
               RowLayout {
@@ -202,7 +218,7 @@ Panel {
                 spacing: Style.space(10)
 
                 Text {
-                  text: "\uf013"
+                  text: root.isConfigOpen ? "\uf077" : "\uf013" // chevron-up or cog
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.icon
@@ -211,11 +227,26 @@ Panel {
                 
                 Text {
                   Layout.fillWidth: true
-                  text: "Settings..."
+                  text: root.isConfigOpen ? "Hide Settings" : "Settings..."
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
                   elide: Text.ElideRight
+                }
+              }
+            }
+            
+            Loader {
+              active: root.isConfigOpen
+              visible: active
+              height: active ? implicitHeight : 0
+              width: parent.width
+              sourceComponent: Component {
+                ConfigPanel {
+                  width: parent.width
+                  pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/murphi.openfortivpn"
+                  onCloseRequested: root.isConfigOpen = false
+                  onConfigSaved: root.isConfigOpen = false
                 }
               }
             }

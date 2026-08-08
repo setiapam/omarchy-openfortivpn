@@ -87,6 +87,10 @@ EOF
     set_val "trusted-cert" "$CERT"
 
     echo "✓ Configuration updated successfully"
+    
+    # Automatically disconnect the VPN so the user is forced to reconnect with the new config
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    "$SCRIPT_DIR/omarchy-openfortivpn-down" >/dev/null 2>&1 || true
     ;;
 
   "fetch-cert")
