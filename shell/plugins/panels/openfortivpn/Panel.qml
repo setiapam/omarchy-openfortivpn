@@ -8,8 +8,8 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "murphi.openfortivpn"
-  ipcTarget: "murphi.openfortivpn"
+  moduleName: "setiapam.openfortivpn"
+  ipcTarget: "setiapam.openfortivpn"
   manageIpc: false
 
   property string focusSection: "header"
@@ -244,7 +244,7 @@ Panel {
               sourceComponent: Component {
                 ConfigPanel {
                   width: parent.width
-                  pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/murphi.openfortivpn"
+                  pluginDir: Quickshell.env("HOME") + "/.config/omarchy/plugins/setiapam.openfortivpn"
                   onCloseRequested: root.isConfigOpen = false
                   onConfigSaved: root.isConfigOpen = false
                 }

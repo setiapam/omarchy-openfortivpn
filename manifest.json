@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "murphi.openfortivpn",
+  "id": "setiapam.openfortivpn",
   "name": "OpenFortiVPN",
   "version": "1.0.0",
   "description": "FortiVPN client integration with SAML/SSO support via openfortivpn and openfortivpn-webview",

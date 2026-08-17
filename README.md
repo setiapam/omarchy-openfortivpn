@@ -29,7 +29,7 @@ omarchy-pkg-add openfortivpn
 By default, connecting to the VPN prompts for authorization (via Polkit / `pkexec`). If you want seamless 1-click connection from the bar widget without password prompts, run the optional setup script:
 
 ```bash
-~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-install-service-openfortivpn
+~/.config/omarchy/plugins/setiapam.openfortivpn/bin/omarchy-install-service-openfortivpn
 ```
 
 ### Optional: SAML / SSO Support
@@ -68,10 +68,10 @@ saml = true
 ## Uninstall
 
 ```bash
-omarchy plugin remove murphi.openfortivpn
+omarchy plugin remove setiapam.openfortivpn
 ```
 If you ran the optional setup script earlier, you can also remove the service and sudoers rule:
 ```bash
-~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-remove-service-openfortivpn
+~/.config/omarchy/plugins/setiapam.openfortivpn/bin/omarchy-remove-service-openfortivpn
 ```
 Your VPN config at `~/.config/openfortivpn/` is preserved during uninstall.

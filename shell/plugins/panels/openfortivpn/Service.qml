@@ -43,7 +43,7 @@ Item {
 
   Process {
     id: statusProc
-    command: ["bash", "-c", "~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-openfortivpn-status"]
+    command: ["bash", "-c", "~/.config/omarchy/plugins/setiapam.openfortivpn/bin/omarchy-openfortivpn-status"]
     stdout: SplitParser {
       onRead: function(data) {
         try {
@@ -68,13 +68,13 @@ Item {
 
   Process {
     id: upProc
-    command: ["bash", "-c", "~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-openfortivpn-up"]
+    command: ["bash", "-c", "~/.config/omarchy/plugins/setiapam.openfortivpn/bin/omarchy-openfortivpn-up"]
     onExited: function() { root.refresh(); _desired = -1 }
   }
 
   Process {
     id: downProc
-    command: ["bash", "-c", "~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-openfortivpn-down"]
+    command: ["bash", "-c", "~/.config/omarchy/plugins/setiapam.openfortivpn/bin/omarchy-openfortivpn-down"]
     onExited: function() { root.refresh(); _desired = -1 }
   }
 

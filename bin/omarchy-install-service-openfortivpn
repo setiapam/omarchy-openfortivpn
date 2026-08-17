@@ -45,8 +45,8 @@ PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 sudo cp "$PLUGIN_DIR/systemd/omarchy-openfortivpn@.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 
-echo "==> Enabling murphi.openfortivpn plugin..."
-omarchy-plugin-enable murphi.openfortivpn
+echo "==> Enabling setiapam.openfortivpn plugin..."
+omarchy-plugin-enable setiapam.openfortivpn
 
 echo "==> Linking helper commands..."
 LINK_DIR="$HOME/.local/bin"
