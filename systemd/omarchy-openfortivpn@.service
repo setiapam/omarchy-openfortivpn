@@ -6,7 +6,6 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/openfortivpn -c /home/%i/.config/openfortivpn/config
-ExecStopPost=/bin/bash -c 'rm -f /tmp/omarchy-openfortivpn-config.pid'
 Restart=on-failure
 RestartSec=5
 

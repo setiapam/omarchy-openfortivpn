@@ -5,7 +5,8 @@
 set -euo pipefail
 
 CONFIG_NAME="${1:-config}"
-PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-openfortivpn"
+PID_FILE="$RUN_DIR/${CONFIG_NAME}.pid"
 CONFIG_FILE="$HOME/.config/openfortivpn/$CONFIG_NAME"
 
 status="disconnected"

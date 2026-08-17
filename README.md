@@ -16,13 +16,28 @@ Matches the look of the built-in wifi/sound icons only in the bar, no inline tex
 
 ## Installation
 
-Dependencies (like `fuse2` and `openfortivpn-webview` AppImage) are automatically handled and provisioned during the standard Omarchy plugin installation process.
-
 ```bash
 omarchy plugin add https://github.com/setiapam/omarchy-openfortivpn.git --enable
+```
 
-# Run the installer to provision dependencies (fuse2, webview) and sudoers rules
+Ensure `openfortivpn` is installed on your system:
+```bash
+omarchy-pkg-add openfortivpn
+```
+
+### Optional: 1-Click Passwordless Connection & Systemd Autostart
+By default, connecting to the VPN prompts for authorization (via Polkit / `pkexec`). If you want seamless 1-click connection from the bar widget without password prompts, run the optional setup script:
+
+```bash
 ~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-install-service-openfortivpn
+```
+
+### Optional: SAML / SSO Support
+If your FortiGate VPN gateway requires SAML / SSO authentication (e.g. Microsoft Azure AD, Okta), install `openfortivpn-webview` from the AUR:
+
+```bash
+omarchy-pkg-add openfortivpn-webview-bin
+# or: yay -S openfortivpn-webview-bin
 ```
 
 ## Configuration
@@ -48,11 +63,15 @@ saml = true
 - **Left-click** — Toggle VPN connection (Connect/Disconnect)
 - **Right-click** — Open settings popup to edit config or view details
 
-*Note: When using Password auth, the VPN will automatically run as a user-level systemd service and persist across reboots. When using SAML, it will automatically popup the login browser upon your next GUI login.*
+*Note: When using Password auth with the optional service installed, the VPN will automatically run as a user-level systemd service and persist across reboots. When using SAML, it will automatically popup the login browser upon your next GUI login.*
 
 ## Uninstall
 
 ```bash
-omarchy plugin remove setiapam.omarchy-openfortivpn
+omarchy plugin remove murphi.openfortivpn
+```
+If you ran the optional setup script earlier, you can also remove the service and sudoers rule:
+```bash
+~/.config/omarchy/plugins/murphi.openfortivpn/bin/omarchy-remove-service-openfortivpn
 ```
 Your VPN config at `~/.config/openfortivpn/` is preserved during uninstall.

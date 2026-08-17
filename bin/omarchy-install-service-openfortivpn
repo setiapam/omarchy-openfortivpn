@@ -8,28 +8,17 @@ echo "==> Installing openfortivpn..."
 omarchy-pkg-add openfortivpn
 
 echo "==> Checking for openfortivpn-webview (SAML/SSO support)..."
-if ! omarchy-cmd-present openfortivpn-webview; then
-  echo "    openfortivpn-webview not found. Attempting automatic installation..."
-  
-  # Install fuse2 which is required for AppImages
-  echo "    Installing fuse2 (required for AppImage)..."
-  sudo pacman -S --noconfirm --needed fuse2 || echo "    Failed to install fuse2. You may need to install it manually."
-
-  # Download the AppImage
-  APPIMAGE_URL="https://github.com/gm-vm/openfortivpn-webview/releases/download/v1.2.3-electron/openfortivpn-webview-1.2.3-x86_64.AppImage"
-  BIN_PATH="$HOME/.local/bin/openfortivpn-webview"
-  
-  echo "    Downloading openfortivpn-webview AppImage..."
-  mkdir -p "$HOME/.local/bin"
-  if curl -sL "$APPIMAGE_URL" -o "$BIN_PATH"; then
-    chmod +x "$BIN_PATH"
-    echo "    ✓ openfortivpn-webview installed successfully."
+if ! command -v openfortivpn-webview >/dev/null 2>&1; then
+  echo "    openfortivpn-webview is not installed. Attempting installation via omarchy-pkg-add..."
+  if omarchy-pkg-add openfortivpn-webview-bin; then
+    echo "    ✓ openfortivpn-webview-bin installed successfully."
   else
-    echo "    ✗ Failed to download openfortivpn-webview."
-    echo "    Continuing without SAML support..."
+    echo "    (Optional) Could not automatically install openfortivpn-webview-bin."
+    echo "    If your VPN requires SAML/SSO authentication, install it manually via:"
+    echo "    yay -S openfortivpn-webview-bin"
   fi
 else
-  echo "    ✓ openfortivpn-webview is already installed."
+  echo "    ✓ openfortivpn-webview is installed."
 fi
 
 echo "==> Setting up default configuration..."
@@ -47,8 +36,8 @@ fi
 
 echo "==> Configuring sudoers rule for passwordless VPN management..."
 SUDOERS_FILE="/etc/sudoers.d/omarchy-openfortivpn"
-echo "%wheel ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn, /usr/bin/pkill -x openfortivpn, /usr/bin/kill *" | sudo tee "$SUDOERS_FILE" >/dev/null
-echo "%sudo ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn, /usr/bin/pkill -x openfortivpn, /usr/bin/kill *" | sudo tee -a "$SUDOERS_FILE" >/dev/null
+echo "%wheel ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn, /usr/bin/pkill -x openfortivpn" | sudo tee "$SUDOERS_FILE" >/dev/null
+echo "%sudo ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn, /usr/bin/pkill -x openfortivpn" | sudo tee -a "$SUDOERS_FILE" >/dev/null
 sudo chmod 0440 "$SUDOERS_FILE"
 
 echo "==> Installing systemd service..."

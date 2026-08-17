@@ -6,7 +6,8 @@
 set -euo pipefail
 
 CONFIG_NAME="${1:-config}"
-PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-openfortivpn"
+PID_FILE="$RUN_DIR/${CONFIG_NAME}.pid"
 
 exec_sudo() {
   if sudo -n -l "$1" >/dev/null 2>&1; then
@@ -27,21 +28,9 @@ fi
 # Remove SAML GUI autostart flag if present
 rm -f "$HOME/.config/openfortivpn/.saml_autostart"
 
-if [[ -f "$PID_FILE" ]]; then
-  VPN_PID=$(cat "$PID_FILE")
-  
-  if kill -0 "$VPN_PID" 2>/dev/null; then
-    echo "==> Stopping VPN connection (PID: $VPN_PID)..."
-    exec_sudo kill -TERM "$VPN_PID" 2>/dev/null || true
-    sleep 1
-    if kill -0 "$VPN_PID" 2>/dev/null; then
-      exec_sudo kill -9 "$VPN_PID" 2>/dev/null || true
-    fi
-  fi
-  rm -f "$PID_FILE"
-fi
-
+# Stop openfortivpn process safely using explicit command without relying on shared PID
 exec_sudo pkill -x openfortivpn 2>/dev/null || true
+rm -f "$PID_FILE"
 
 echo "✓ VPN disconnected"
 omarchy-notification-send "OpenFortiVPN" "Disconnected" 2>/dev/null || true

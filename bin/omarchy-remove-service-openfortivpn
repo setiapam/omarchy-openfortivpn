@@ -1,5 +1,5 @@
 #!/bin/bash
-# omarchy:summary=Remove OpenFortiVPN service and plugin
+# omarchy:summary=Remove OpenFortiVPN service and plugin artifacts
 # omarchy:requires-sudo=true
 
 set -euo pipefail
@@ -8,26 +8,38 @@ echo "==> Disconnecting VPN if active..."
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 "$PLUGIN_DIR/bin/omarchy-openfortivpn-down" 2>/dev/null || true
 
-echo "==> Removing systemd service and sudoers rules..."
+echo "==> Removing user systemd services..."
+systemctl --user stop omarchy-openfortivpn.service 2>/dev/null || true
+systemctl --user disable omarchy-openfortivpn.service 2>/dev/null || true
+rm -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
+systemctl --user daemon-reload 2>/dev/null || true
+
+echo "==> Removing system systemd service and sudoers rules..."
 sudo systemctl stop 'omarchy-openfortivpn@*.service' 2>/dev/null || true
 sudo rm -f /etc/systemd/system/omarchy-openfortivpn@.service
 sudo rm -f /etc/sudoers.d/omarchy-openfortivpn
 sudo systemctl daemon-reload
 
+echo "==> Cleaning runtime state..."
+rm -rf "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-openfortivpn"
+rm -f "$HOME/.config/openfortivpn/.saml_autostart"
+
 echo "==> Disabling murphi.openfortivpn plugin..."
-omarchy-plugin-disable murphi.openfortivpn
+omarchy-plugin-disable murphi.openfortivpn 2>/dev/null || true
 
 echo "==> Removing helper command links..."
 LINK_DIR="$HOME/.local/bin"
-for cmd in omarchy-openfortivpn-up omarchy-openfortivpn-down omarchy-openfortivpn-status; do
+for cmd in omarchy-openfortivpn-up omarchy-openfortivpn-down omarchy-openfortivpn-status openfortivpn-webview; do
   rm -f "$LINK_DIR/$cmd"
 done
 
-echo "==> Removing openfortivpn package..."
-omarchy-pkg-drop openfortivpn
+echo "==> Removing installed packages..."
+omarchy-pkg-drop openfortivpn-webview-bin 2>/dev/null || true
+omarchy-pkg-drop openfortivpn 2>/dev/null || true
 
 echo ""
-echo "✓ OpenFortiVPN plugin removed successfully!"
+echo "✓ OpenFortiVPN artifacts and services removed successfully!"
 echo ""
-echo "Note: Your config at ~/.config/openfortivpn/ was preserved."
-echo "      Remove it manually if no longer needed."
+echo "Note: Your VPN config at ~/.config/openfortivpn/ was preserved."
+echo "      Remove it manually if no longer needed: rm -rf ~/.config/openfortivpn"
+

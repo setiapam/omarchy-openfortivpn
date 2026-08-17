@@ -8,10 +8,14 @@ set -euo pipefail
 CONFIG_NAME="${1:-config}"
 CONFIG_DIR="$HOME/.config/openfortivpn"
 CONFIG_FILE="$CONFIG_DIR/$CONFIG_NAME"
-PID_FILE="/tmp/omarchy-openfortivpn-${CONFIG_NAME}.pid"
+RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-openfortivpn"
+mkdir -p "$RUN_DIR"
+chmod 700 "$RUN_DIR"
+PID_FILE="$RUN_DIR/${CONFIG_NAME}.pid"
+LOCK_FILE="$RUN_DIR/${CONFIG_NAME}.lock"
 
 # Ensure only one instance of the script runs at a time (prevents multi-monitor double-launch)
-exec 9>"/tmp/omarchy-openfortivpn-${CONFIG_NAME}.lock"
+exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   echo "Another instance of openfortivpn-up is already running."
   exit 0
@@ -27,6 +31,13 @@ exec_sudo() {
     sudo "$@"
   fi
 }
+
+# Check if openfortivpn binary is installed
+if ! command -v openfortivpn >/dev/null 2>&1; then
+  echo "Error: openfortivpn is not installed."
+  omarchy-notification-send "OpenFortiVPN" "Error: openfortivpn is not installed. Install via: omarchy-pkg-add openfortivpn" 2>/dev/null || true
+  exit 1
+fi
 
 if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   echo "VPN is already connected (PID: $(cat "$PID_FILE"))"
@@ -101,12 +112,14 @@ connect_with_saml() {
 }
 
 connect_with_password() {
-  echo "==> Connecting to ${VPN_HOST}:${VPN_PORT} via systemd..."
-  
-  # Ensure the user service file exists
-  if [[ ! -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service" ]]; then
-    mkdir -p "$HOME/.config/systemd/user"
-    cat << 'EOF' > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
+  # If sudoers NOPASSWD is configured, use systemd user service for auto-connect across reboots
+  if sudo -n openfortivpn --version >/dev/null 2>&1; then
+    echo "==> Connecting to ${VPN_HOST}:${VPN_PORT} via systemd..."
+    
+    # Ensure the user service file exists
+    if [[ ! -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service" ]]; then
+      mkdir -p "$HOME/.config/systemd/user"
+      cat << 'EOF' > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
 [Unit]
 Description=OpenFortiVPN Auto-Connect
 After=network-online.target
@@ -121,20 +134,37 @@ RestartSec=10
 [Install]
 WantedBy=default.target
 EOF
-    systemctl --user daemon-reload
-  fi
+      systemctl --user daemon-reload
+    fi
 
-  # Enable and start the service so it persists across reboots
-  systemctl --user enable --now omarchy-openfortivpn.service
+    # Enable and start the service so it persists across reboots
+    systemctl --user enable --now omarchy-openfortivpn.service
 
-  # Wait briefly to check if connection succeeded
-  sleep 3
-  if systemctl --user is-active --quiet omarchy-openfortivpn.service; then
-    echo "✓ VPN connected successfully via systemd"
-    omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
+    # Wait briefly to check if connection succeeded
+    sleep 3
+    if systemctl --user is-active --quiet omarchy-openfortivpn.service; then
+      echo "✓ VPN connected successfully via systemd"
+      omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
+    else
+      echo "✗ VPN connection failed. Check 'journalctl --user -xeu omarchy-openfortivpn' for logs."
+      exit 1
+    fi
   else
-    echo "✗ VPN connection failed. Check 'journalctl --user -xeu omarchy-openfortivpn' for logs."
-    exit 1
+    # Fallback to direct execution with Polkit / sudo prompt
+    echo "==> Connecting to ${VPN_HOST}:${VPN_PORT}..."
+    exec_sudo openfortivpn -c "$CONFIG_FILE" &
+    VPN_PID=$!
+    echo "$VPN_PID" > "$PID_FILE"
+
+    sleep 3
+    if kill -0 "$VPN_PID" 2>/dev/null; then
+      echo "✓ VPN connected successfully (PID: $VPN_PID)"
+      omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
+    else
+      rm -f "$PID_FILE"
+      echo "✗ VPN connection failed. Check your credentials or logs."
+      exit 1
+    fi
   fi
 }
 
