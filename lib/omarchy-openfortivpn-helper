@@ -1,0 +1,81 @@
+#!/bin/bash
+# omarchy-openfortivpn-helper — root-owned, sudoers-whitelisted helper
+#
+# This script is the ONLY binary listed in the sudoers NOPASSWD rule.
+# It validates all inputs before invoking openfortivpn as root.
+#
+# Usage (via sudo):
+#   sudo /usr/local/lib/omarchy/openfortivpn-helper connect  <user> <config_name>
+#   sudo /usr/local/lib/omarchy/openfortivpn-helper cookie-connect <user> <config_name>
+#   sudo /usr/local/lib/omarchy/openfortivpn-helper disconnect
+#
+# Installed to: /usr/local/lib/omarchy/openfortivpn-helper
+# Owner:        root:root, mode 0755
+
+set -euo pipefail
+
+readonly OPENFORTIVPN="/usr/bin/openfortivpn"
+readonly CONFIG_BASE_DIR="/home"        # configs live under /home/<user>/.config/openfortivpn/
+readonly CONFIG_SUBPATH=".config/openfortivpn"
+readonly CONFIG_NAME_RE='^[a-zA-Z0-9][a-zA-Z0-9._-]*$'
+readonly MAX_CONFIG_NAME_LEN=64
+readonly ALLOWED_ACTIONS="connect|cookie-connect|disconnect"
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+
+# ── validate action ──────────────────────────────────────────────────
+ACTION="${1:-}"
+[[ -n "$ACTION" ]] || die "missing action argument"
+[[ "$ACTION" =~ ^(connect|cookie-connect|disconnect)$ ]] || die "invalid action '$ACTION' (allowed: $ALLOWED_ACTIONS)"
+
+# ── disconnect: just kill openfortivpn ────────────────────────────
+if [[ "$ACTION" == "disconnect" ]]; then
+  /usr/bin/pkill -x openfortivpn 2>/dev/null || true
+  exit 0
+fi
+
+# ── connect / cookie-connect: validate user and config name ──────
+CALLING_USER="${2:-}"
+CONFIG_NAME="${3:-config}"
+
+# Validate calling user — must be a real, non-root, non-system user
+[[ -n "$CALLING_USER" ]] || die "missing user argument"
+[[ "$CALLING_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || die "invalid username '$CALLING_USER'"
+[[ "$CALLING_USER" != "root" ]] || die "refusing to run for root"
+id "$CALLING_USER" >/dev/null 2>&1 || die "user '$CALLING_USER' does not exist"
+
+# Validate config name — strict alphanumeric with dots/hyphens/underscores, no slashes
+[[ ${#CONFIG_NAME} -le $MAX_CONFIG_NAME_LEN ]] || die "config name too long (max $MAX_CONFIG_NAME_LEN chars)"
+[[ "$CONFIG_NAME" =~ $CONFIG_NAME_RE ]] || die "invalid config name '$CONFIG_NAME' (must match $CONFIG_NAME_RE)"
+# Extra safety: reject any path separator or parent-directory reference
+[[ "$CONFIG_NAME" != *"/"* ]] || die "config name must not contain '/'"
+[[ "$CONFIG_NAME" != *".."* ]] || die "config name must not contain '..'"
+
+# Build config path and verify it exists under the expected directory
+CONFIG_FILE="$CONFIG_BASE_DIR/$CALLING_USER/$CONFIG_SUBPATH/$CONFIG_NAME"
+
+# Resolve to canonical path and ensure it stays within the user's config dir
+CANONICAL_DIR=$(readlink -f "$CONFIG_BASE_DIR/$CALLING_USER/$CONFIG_SUBPATH" 2>/dev/null) || die "cannot resolve config directory"
+CANONICAL_FILE=$(readlink -f "$CONFIG_FILE" 2>/dev/null) || die "config file not found: $CONFIG_FILE"
+
+# Ensure the resolved file is strictly inside the config directory
+case "$CANONICAL_FILE" in
+  "$CANONICAL_DIR"/*) ;; # OK — file is inside the config dir
+  *) die "config file resolves outside allowed directory" ;;
+esac
+
+[[ -f "$CONFIG_FILE" ]] || die "config file not found: $CONFIG_FILE"
+[[ -r "$CONFIG_FILE" ]] || die "config file not readable: $CONFIG_FILE"
+
+# ── execute openfortivpn ─────────────────────────────────────────
+[[ -x "$OPENFORTIVPN" ]] || die "openfortivpn not found at $OPENFORTIVPN"
+
+case "$ACTION" in
+  connect)
+    exec "$OPENFORTIVPN" -c "$CONFIG_FILE"
+    ;;
+  cookie-connect)
+    # Read SVPNCOOKIE from stdin (piped from openfortivpn-webview)
+    exec "$OPENFORTIVPN" -c "$CONFIG_FILE" --cookie-on-stdin
+    ;;
+esac

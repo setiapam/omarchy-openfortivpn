@@ -34,14 +34,31 @@ else
   echo "    Config already exists at $CONFIG_DIR/config, skipping."
 fi
 
+echo "==> Installing validated helper script..."
+PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+HELPER_DIR="/usr/local/lib/omarchy"
+HELPER_PATH="$HELPER_DIR/openfortivpn-helper"
+sudo mkdir -p "$HELPER_DIR"
+sudo cp "$PLUGIN_DIR/lib/omarchy-openfortivpn-helper" "$HELPER_PATH"
+sudo chown root:root "$HELPER_PATH"
+sudo chmod 0755 "$HELPER_PATH"
+
 echo "==> Configuring sudoers rule for passwordless VPN management..."
 SUDOERS_FILE="/etc/sudoers.d/omarchy-openfortivpn"
-echo "%wheel ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn, /usr/bin/pkill -x openfortivpn" | sudo tee "$SUDOERS_FILE" >/dev/null
-echo "%sudo ALL=(ALL) NOPASSWD: /usr/bin/openfortivpn, /usr/bin/pkill -x openfortivpn" | sudo tee -a "$SUDOERS_FILE" >/dev/null
+# Only the validated helper is allowed — no direct openfortivpn or pkill access
+{
+  echo "%wheel ALL=(ALL) NOPASSWD: $HELPER_PATH"
+  echo "%sudo  ALL=(ALL) NOPASSWD: $HELPER_PATH"
+} | sudo tee "$SUDOERS_FILE" >/dev/null
 sudo chmod 0440 "$SUDOERS_FILE"
+# Verify sudoers syntax
+if ! sudo visudo -c -f "$SUDOERS_FILE" >/dev/null 2>&1; then
+  echo "ERROR: sudoers syntax check failed — removing invalid file"
+  sudo rm -f "$SUDOERS_FILE"
+  exit 1
+fi
 
 echo "==> Installing systemd service..."
-PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 sudo cp "$PLUGIN_DIR/systemd/omarchy-openfortivpn@.service" /etc/systemd/system/
 sudo systemctl daemon-reload
 

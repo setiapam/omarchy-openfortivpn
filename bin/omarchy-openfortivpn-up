@@ -14,6 +14,9 @@ chmod 700 "$RUN_DIR"
 PID_FILE="$RUN_DIR/${CONFIG_NAME}.pid"
 LOCK_FILE="$RUN_DIR/${CONFIG_NAME}.lock"
 
+readonly HELPER="/usr/local/lib/omarchy/openfortivpn-helper"
+readonly CALLING_USER="$(id -un)"
+
 # Ensure only one instance of the script runs at a time (prevents multi-monitor double-launch)
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
@@ -21,14 +24,21 @@ if ! flock -n 9; then
   exit 0
 fi
 
-# Helper for elevated execution (supports non-interactive sudoers rule with pkexec fallback)
-exec_sudo() {
-  if sudo -n -l "$1" >/dev/null 2>&1; then
-    sudo "$@"
+# Validate config name early (mirror the helper's check so we fail fast)
+if [[ ! "$CONFIG_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+  echo "Error: Invalid config name '$CONFIG_NAME'. Only alphanumeric, dots, hyphens, and underscores are allowed."
+  exit 1
+fi
+
+# Helper for elevated execution via the validated helper script
+exec_vpn() {
+  local action="$1"; shift
+  if sudo -n -l "$HELPER" >/dev/null 2>&1; then
+    sudo "$HELPER" "$action" "$CALLING_USER" "$CONFIG_NAME" "$@"
   elif command -v pkexec >/dev/null 2>&1; then
-    pkexec "$@"
+    pkexec "$HELPER" "$action" "$CALLING_USER" "$CONFIG_NAME" "$@"
   else
-    sudo "$@"
+    sudo "$HELPER" "$action" "$CALLING_USER" "$CONFIG_NAME" "$@"
   fi
 }
 
@@ -92,7 +102,7 @@ connect_with_saml() {
   fi
 
   echo "==> SAML authentication successful. Connecting VPN tunnel..."
-  echo "$COOKIE" | exec_sudo openfortivpn -c "$CONFIG_FILE" --cookie-on-stdin &
+  echo "$COOKIE" | exec_vpn cookie-connect &
   VPN_PID=$!
   echo "$VPN_PID" > "$PID_FILE"
 
@@ -113,21 +123,21 @@ connect_with_saml() {
 
 connect_with_password() {
   # If sudoers NOPASSWD is configured, use systemd user service for auto-connect across reboots
-  if sudo -n openfortivpn --version >/dev/null 2>&1; then
+  if sudo -n -l "$HELPER" >/dev/null 2>&1; then
     echo "==> Connecting to ${VPN_HOST}:${VPN_PORT} via systemd..."
     
     # Ensure the user service file exists
     if [[ ! -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service" ]]; then
       mkdir -p "$HOME/.config/systemd/user"
-      cat << 'EOF' > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
+      cat << EOF > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
 [Unit]
 Description=OpenFortiVPN Auto-Connect
 After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/sudo -n /usr/bin/openfortivpn -c %h/.config/openfortivpn/config
-ExecStop=/usr/bin/sudo -n /usr/bin/pkill -x openfortivpn
+ExecStart=/usr/bin/sudo -n $HELPER connect $CALLING_USER $CONFIG_NAME
+ExecStop=/usr/bin/sudo -n $HELPER disconnect
 Restart=on-failure
 RestartSec=10
 
@@ -152,7 +162,7 @@ EOF
   else
     # Fallback to direct execution with Polkit / sudo prompt
     echo "==> Connecting to ${VPN_HOST}:${VPN_PORT}..."
-    exec_sudo openfortivpn -c "$CONFIG_FILE" &
+    exec_vpn connect &
     VPN_PID=$!
     echo "$VPN_PID" > "$PID_FILE"
 

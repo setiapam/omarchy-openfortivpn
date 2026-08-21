@@ -14,10 +14,12 @@ systemctl --user disable omarchy-openfortivpn.service 2>/dev/null || true
 rm -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
 systemctl --user daemon-reload 2>/dev/null || true
 
-echo "==> Removing system systemd service and sudoers rules..."
+echo "==> Removing system systemd service, sudoers rules, and helper..."
 sudo systemctl stop 'omarchy-openfortivpn@*.service' 2>/dev/null || true
 sudo rm -f /etc/systemd/system/omarchy-openfortivpn@.service
 sudo rm -f /etc/sudoers.d/omarchy-openfortivpn
+sudo rm -f /usr/local/lib/omarchy/openfortivpn-helper
+sudo rmdir /usr/local/lib/omarchy 2>/dev/null || true
 sudo systemctl daemon-reload
 
 echo "==> Cleaning runtime state..."
@@ -42,4 +44,3 @@ echo "✓ OpenFortiVPN artifacts and services removed successfully!"
 echo ""
 echo "Note: Your VPN config at ~/.config/openfortivpn/ was preserved."
 echo "      Remove it manually if no longer needed: rm -rf ~/.config/openfortivpn"
-

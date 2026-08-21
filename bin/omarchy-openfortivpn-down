@@ -9,13 +9,16 @@ CONFIG_NAME="${1:-config}"
 RUN_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-openfortivpn"
 PID_FILE="$RUN_DIR/${CONFIG_NAME}.pid"
 
-exec_sudo() {
-  if sudo -n -l "$1" >/dev/null 2>&1; then
-    sudo "$@"
+readonly HELPER="/usr/local/lib/omarchy/openfortivpn-helper"
+
+# Helper for elevated execution via the validated helper script
+exec_disconnect() {
+  if sudo -n -l "$HELPER" >/dev/null 2>&1; then
+    sudo "$HELPER" disconnect
   elif command -v pkexec >/dev/null 2>&1; then
-    pkexec "$@"
+    pkexec "$HELPER" disconnect
   else
-    sudo "$@"
+    sudo "$HELPER" disconnect
   fi
 }
 
@@ -28,8 +31,8 @@ fi
 # Remove SAML GUI autostart flag if present
 rm -f "$HOME/.config/openfortivpn/.saml_autostart"
 
-# Stop openfortivpn process safely using explicit command without relying on shared PID
-exec_sudo pkill -x openfortivpn 2>/dev/null || true
+# Stop openfortivpn process safely via the helper
+exec_disconnect
 rm -f "$PID_FILE"
 
 echo "✓ VPN disconnected"
