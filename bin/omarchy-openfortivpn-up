@@ -126,10 +126,9 @@ connect_with_password() {
   if sudo -n -l "$HELPER" >/dev/null 2>&1; then
     echo "==> Connecting to ${VPN_HOST}:${VPN_PORT} via systemd..."
     
-    # Ensure the user service file exists
-    if [[ ! -f "$HOME/.config/systemd/user/omarchy-openfortivpn.service" ]]; then
-      mkdir -p "$HOME/.config/systemd/user"
-      cat << EOF > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
+    # Always (re-)generate the user service so it matches the current helper path
+    mkdir -p "$HOME/.config/systemd/user"
+    cat << EOF > "$HOME/.config/systemd/user/omarchy-openfortivpn.service"
 [Unit]
 Description=OpenFortiVPN Auto-Connect
 After=network-online.target
@@ -144,8 +143,7 @@ RestartSec=10
 [Install]
 WantedBy=default.target
 EOF
-      systemctl --user daemon-reload
-    fi
+    systemctl --user daemon-reload
 
     # Enable and start the service so it persists across reboots
     systemctl --user enable --now omarchy-openfortivpn.service
