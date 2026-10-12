@@ -103,12 +103,23 @@ EOF
       exit 1
     fi
 
-    # Probe openfortivpn output to capture gateway certificate SHA256 digest
-    OUT=$(openfortivpn "${HOST}:${PORT}" --username=probe 2>&1 || true)
-    HASH=$(echo "$OUT" | grep -i "trusted-cert =" | head -1 | sed 's/.*trusted-cert = //' | tr -d '[:space:]' || true)
+    # Try openssl first (works without root privileges and handles IP/SNI)
+    HASH=""
+    if command -v openssl >/dev/null 2>&1; then
+      HASH=$(openssl s_client -connect "${HOST}:${PORT}" -servername "${HOST}" </dev/null 2>/dev/null \
+        | openssl x509 -outform DER 2>/dev/null \
+        | sha256sum 2>/dev/null \
+        | awk '{print $1}' || true)
+    fi
 
-    if [[ -z "$HASH" ]]; then
-      HASH=$(echo "$OUT" | grep -i "digest:" | head -1 | sed 's/.*digest:[[:space:]]*//' | tr -d '[:space:]' || true)
+    # Fallback to probing openfortivpn output if openssl failed
+    if [[ -z "$HASH" ]] && command -v openfortivpn >/dev/null 2>&1; then
+      OUT=$(openfortivpn "${HOST}:${PORT}" --username=probe 2>&1 || true)
+      HASH=$(echo "$OUT" | grep -i "trusted-cert =" | head -1 | sed 's/.*trusted-cert = //' | tr -d '[:space:]' || true)
+
+      if [[ -z "$HASH" ]]; then
+        HASH=$(echo "$OUT" | grep -i "digest:" | head -1 | sed 's/.*digest:[[:space:]]*//' | tr -d '[:space:]' || true)
+      fi
     fi
 
     if [[ -n "$HASH" ]]; then

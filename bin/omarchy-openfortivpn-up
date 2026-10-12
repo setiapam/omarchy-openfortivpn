@@ -106,9 +106,20 @@ connect_with_saml() {
   VPN_PID=$!
   echo "$VPN_PID" > "$PID_FILE"
 
-  # Wait briefly to check if connection succeeded
-  sleep 3
-  if kill -0 "$VPN_PID" 2>/dev/null; then
+  # Wait for tunnel interface to be UP
+  local connected=false
+  for _ in {1..15}; do
+    if ip link show ppp0 >/dev/null 2>&1; then
+      connected=true
+      break
+    fi
+    if ! kill -0 "$VPN_PID" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ "$connected" == "true" ]]; then
     echo "✓ VPN connected successfully (PID: $VPN_PID)"
     omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
 
@@ -116,7 +127,7 @@ connect_with_saml() {
     touch "$HOME/.config/openfortivpn/.saml_autostart"
   else
     rm -f "$PID_FILE"
-    echo "✗ VPN connection failed. Check the logs."
+    echo "✗ VPN connection failed or timed out. Check the logs."
     exit 1
   fi
 }
@@ -148,13 +159,25 @@ EOF
     # Enable and start the service so it persists across reboots
     systemctl --user enable --now omarchy-openfortivpn.service
 
-    # Wait briefly to check if connection succeeded
-    sleep 3
-    if systemctl --user is-active --quiet omarchy-openfortivpn.service; then
+    # Wait for tunnel interface to be UP
+    echo "==> Waiting for VPN tunnel to establish..."
+    local connected=false
+    for _ in {1..15}; do
+      if ip link show ppp0 >/dev/null 2>&1; then
+        connected=true
+        break
+      fi
+      if ! systemctl --user is-active --quiet omarchy-openfortivpn.service; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ "$connected" == "true" ]]; then
       echo "✓ VPN connected successfully via systemd"
       omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
     else
-      echo "✗ VPN connection failed. Check 'journalctl --user -xeu omarchy-openfortivpn' for logs."
+      echo "✗ VPN connection failed or timed out. Check 'journalctl --user -xeu omarchy-openfortivpn' for logs."
       exit 1
     fi
   else
@@ -164,13 +187,24 @@ EOF
     VPN_PID=$!
     echo "$VPN_PID" > "$PID_FILE"
 
-    sleep 3
-    if kill -0 "$VPN_PID" 2>/dev/null; then
+    local connected=false
+    for _ in {1..15}; do
+      if ip link show ppp0 >/dev/null 2>&1; then
+        connected=true
+        break
+      fi
+      if ! kill -0 "$VPN_PID" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+
+    if [[ "$connected" == "true" ]]; then
       echo "✓ VPN connected successfully (PID: $VPN_PID)"
       omarchy-notification-send "OpenFortiVPN" "Connected to ${VPN_HOST}" 2>/dev/null || true
     else
       rm -f "$PID_FILE"
-      echo "✗ VPN connection failed. Check your credentials or logs."
+      echo "✗ VPN connection failed or timed out. Check your credentials or logs."
       exit 1
     fi
   fi

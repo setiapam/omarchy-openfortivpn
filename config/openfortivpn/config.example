@@ -5,6 +5,8 @@
 # and edit with your VPN gateway details.
 
 # VPN Gateway
+# Note: If system split-DNS routes the gateway domain to internal DNS servers,
+# specify the gateway IP address directly to avoid DNS resolution deadlock.
 host = vpn.example.com
 port = 443
 

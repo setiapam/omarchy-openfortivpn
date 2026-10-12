@@ -18,30 +18,31 @@ if [[ -f "$CONFIG_FILE" ]]; then
   host=$(grep -i "^host[[:space:]]*=" "$CONFIG_FILE" 2>/dev/null | head -1 | sed 's/^host[[:space:]]*=[[:space:]]*//' | tr -d '[:space:]' || echo "")
 fi
 
-if ip link show ppp0 >/dev/null 2>&1; then
-  status="connected"
+# Check if openfortivpn process is running
+if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
+  pid=$(cat "$PID_FILE")
+elif pgrep -x openfortivpn >/dev/null 2>&1; then
+  pid=$(pgrep -x openfortivpn | head -1 || echo "")
 fi
 
-if [[ -f "$PID_FILE" ]]; then
-  pid=$(cat "$PID_FILE")
-  if kill -0 "$pid" 2>/dev/null; then
-    status="connected"
-    if [[ -d "/proc/$pid" ]]; then
-      start_time=$(stat -c %Y "/proc/$pid" 2>/dev/null || echo "")
-      if [[ -n "$start_time" ]]; then
-        now=$(date +%s)
-        uptime_secs=$(( now - start_time ))
-      fi
-    fi
-  else
+# Only consider connected if the tunnel interface (ppp0) is UP
+if ip link show ppp0 >/dev/null 2>&1; then
+  status="connected"
+elif [[ -n "$pid" ]] || systemctl --user is-active --quiet omarchy-openfortivpn.service 2>/dev/null; then
+  status="connecting"
+else
+  status="disconnected"
+  if [[ -f "$PID_FILE" ]]; then
     rm -f "$PID_FILE"
-    pid=""
   fi
 fi
 
-if [[ "$status" == "disconnected" ]] && pgrep -x openfortivpn >/dev/null 2>&1; then
-  status="connected"
-  pid=$(pgrep -x openfortivpn | head -1 || echo "")
+if [[ -n "$pid" && -d "/proc/$pid" ]]; then
+  start_time=$(stat -c %Y "/proc/$pid" 2>/dev/null || echo "")
+  if [[ -n "$start_time" ]]; then
+    now=$(date +%s)
+    uptime_secs=$(( now - start_time ))
+  fi
 fi
 
 saml="false"
