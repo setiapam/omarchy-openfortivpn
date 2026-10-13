@@ -88,6 +88,8 @@ Panel {
     SequentialAnimation on opacity {
       running: vpn.status === "connecting" || vpn.status === "disconnecting"
       loops: Animation.Infinite
+      // Stopping an animation preserves its last value; restore the idle icon.
+      onRunningChanged: if (!running) button.opacity = 1.0
       NumberAnimation { to: 0.4; duration: 600; easing.type: Easing.InOutQuad }
       NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
     }
